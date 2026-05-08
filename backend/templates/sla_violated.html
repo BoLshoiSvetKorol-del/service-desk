@@ -1,0 +1,20 @@
+{% extends "base_email.html" %}
+{% block content %}
+<p style="background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:12px 16px;color:#cf1322;font-weight:600;">
+  🚨 SLA нарушен — требуется эскалация!
+</p>
+
+<p>Здравствуйте, <strong>{{ lead_name }}</strong>!</p>
+<p>Заявка просрочена и требует немедленного вмешательства:</p>
+
+<table class="meta">
+  <tr><td>Номер</td><td><span class="ticket-number">{{ ticket_number }}</span></td></tr>
+  <tr><td>Тема</td><td>{{ ticket_title }}</td></tr>
+  <tr><td>Дедлайн был</td><td>{{ sla_deadline }}</td></tr>
+  <tr><td>Просрочено на</td><td><strong style="color:#cf1322;">{{ overdue_hours }} ч.</strong></td></tr>
+</table>
+
+<p style="margin-top:16px;font-size:14px;color:#555;">
+  Пожалуйста, примите меры для разрешения заявки или переназначьте её.
+</p>
+{% endblock %}

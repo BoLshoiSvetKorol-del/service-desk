@@ -1,0 +1,18 @@
+{% extends "base_email.html" %}
+{% block content %}
+<p>Здравствуйте, <strong>{{ recipient_name }}</strong>!</p>
+<p>Статус заявки изменился:</p>
+
+<table class="meta">
+  <tr><td>Номер</td><td><span class="ticket-number">{{ ticket_number }}</span></td></tr>
+  <tr><td>Тема</td><td>{{ ticket_title }}</td></tr>
+  <tr><td>Старый статус</td><td>{{ old_status }}</td></tr>
+  <tr><td>Новый статус</td><td><strong>{{ new_status }}</strong></td></tr>
+  <tr><td>Изменил</td><td>{{ actor_name }}</td></tr>
+</table>
+
+{% if comment %}
+<p style="margin-top:16px;font-size:14px;"><strong>Комментарий:</strong></p>
+<p style="background:#f9f9f9;padding:12px;border-left:3px solid #1677ff;font-size:14px;">{{ comment }}</p>
+{% endif %}
+{% endblock %}

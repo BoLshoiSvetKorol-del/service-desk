@@ -1,0 +1,17 @@
+{% extends "base_email.html" %}
+{% block content %}
+<p>Здравствуйте, <strong>{{ assignee_name }}</strong>!</p>
+<p>На вас назначена заявка:</p>
+
+<table class="meta">
+  <tr><td>Номер</td><td><span class="ticket-number">{{ ticket_number }}</span></td></tr>
+  <tr><td>Тема</td><td>{{ ticket_title }}</td></tr>
+  <tr><td>Заявитель</td><td>{{ requester_name }}</td></tr>
+  <tr><td>Приоритет</td><td>{{ priority }}</td></tr>
+  <tr><td>SLA-дедлайн</td><td>{{ sla_deadline }}</td></tr>
+</table>
+
+<p style="margin-top:24px;font-size:14px;color:#555;">
+  Пожалуйста, возьмите заявку в работу в установленные сроки.
+</p>
+{% endblock %}

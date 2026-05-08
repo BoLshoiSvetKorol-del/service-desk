@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+*.pyc
+
+# Environment
+.env
+!.env.example
+
+# Uploads (user files)
+backend/uploads/
+
+# Celery
+backend/celerybeat-schedule
+backend/celerybeat.pid
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp / extracted files
+sd_extracted.txt
+lastmessage.txt
+
+# Alembic pyc in versions
+backend/alembic/versions/__pycache__/
+
+# Claude
+.claude/
+SD_extracted.txt

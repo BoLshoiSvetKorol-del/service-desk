@@ -1,0 +1,67 @@
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, field_validator
+from app.models.user import UserRole
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    full_name: str
+    role: UserRole
+    department_id: int | None = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    username: str
+    password: str
+    full_name: str
+    role: UserRole = UserRole.user
+    department_id: int | None = None
+
+    @field_validator("username")
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("username может содержать только буквы, цифры, _ и -")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Пароль должен быть не менее 6 символов")
+        return v
+
+
+class UserUpdate(BaseModel):
+    email: EmailStr | None = None
+    full_name: str | None = None
+    password: str | None = None
+    department_id: int | None = None
+    role: UserRole | None = None
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 6:
+            raise ValueError("Пароль должен быть не менее 6 символов")
+        return v
+
+
+class UserMeUpdate(BaseModel):
+    email: EmailStr | None = None
+    full_name: str | None = None
+    password: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 6:
+            raise ValueError("Пароль должен быть не менее 6 символов")
+        return v

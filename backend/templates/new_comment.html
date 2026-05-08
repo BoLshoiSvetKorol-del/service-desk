@@ -1,0 +1,14 @@
+{% extends "base_email.html" %}
+{% block content %}
+<p>Здравствуйте, <strong>{{ recipient_name }}</strong>!</p>
+<p>Новый комментарий к заявке <span class="ticket-number">{{ ticket_number }}</span>:</p>
+
+<p style="background:#f9f9f9;padding:12px;border-left:3px solid #1677ff;font-size:14px;margin-top:16px;">
+  {{ comment_body }}
+</p>
+
+<table class="meta">
+  <tr><td>Автор</td><td>{{ author_name }}</td></tr>
+  <tr><td>Дата</td><td>{{ created_at }}</td></tr>
+</table>
+{% endblock %}
