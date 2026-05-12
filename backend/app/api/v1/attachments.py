@@ -1,6 +1,7 @@
 import mimetypes
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
 
@@ -12,7 +13,9 @@ from app.models.user import User, UserRole
 from app.schemas.attachment import AttachmentResponse
 from app.services.storage import get_storage
 from app.services.ticket_service import _check_ticket_access
+from app.services.notification_service import notify_ticket_event
 from app.utils.permissions import get_current_user
+from app.redis import get_redis
 from app.config import settings
 
 router = APIRouter()
@@ -84,6 +87,9 @@ async def _upload(
 
 def _attachment_response(att: Attachment) -> AttachmentResponse:
     storage = get_storage()
+    uploader_name: str | None = None
+    if att.uploader:
+        uploader_name = att.uploader.full_name or att.uploader.username
     return AttachmentResponse(
         id=att.id,
         ticket_id=att.ticket_id,
@@ -92,9 +98,30 @@ def _attachment_response(att: Attachment) -> AttachmentResponse:
         size_bytes=att.size_bytes,
         mimetype=att.mimetype,
         uploaded_by=att.uploaded_by,
+        uploader_name=uploader_name,
         url=storage.get_url(att.stored_path),
         created_at=att.created_at,
     )
+
+
+@router.get(
+    "/tickets/{ticket_id}/attachments",
+    response_model=list[AttachmentResponse],
+    tags=["attachments"],
+)
+async def list_ticket_attachments(
+    ticket_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ticket = await _get_ticket_or_404(db, ticket_id)
+    _check_ticket_access(ticket, current_user)
+    result = await db.execute(
+        select(Attachment)
+        .where(Attachment.ticket_id == ticket_id)
+        .order_by(Attachment.created_at)
+    )
+    return [_attachment_response(att) for att in result.scalars().all()]
 
 
 @router.post(
@@ -108,10 +135,13 @@ async def upload_to_ticket(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ):
     ticket = await _get_ticket_or_404(db, ticket_id)
     _check_ticket_access(ticket, current_user)
     att = await _upload(db, current_user, ticket, file, comment_id=None)
+    await notify_ticket_event(db, redis, ticket, "new_attachment", actor=current_user,
+                              extra={"filename": att.original_filename})
     return _attachment_response(att)
 
 
@@ -127,6 +157,7 @@ async def upload_to_comment(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ):
     ticket = await _get_ticket_or_404(db, ticket_id)
     _check_ticket_access(ticket, current_user)
@@ -136,6 +167,8 @@ async def upload_to_comment(
         raise HTTPException(status_code=404, detail="Комментарий не найден")
 
     att = await _upload(db, current_user, ticket, file, comment_id=comment_id)
+    await notify_ticket_event(db, redis, ticket, "new_attachment", actor=current_user,
+                              extra={"filename": att.original_filename})
     return _attachment_response(att)
 
 

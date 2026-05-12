@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Form, Input, Button, Card, Typography, Alert } from 'antd'
+import { Form, Input, Button, Card, Typography, Alert, Divider } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { login } from '../../api/auth'
 import { useAuthStore } from '../../store/authStore'
 import { getErrorMessage } from '../../types/common'
@@ -10,12 +10,9 @@ const { Title } = Typography
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { login: storeLogin } = useAuthStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard'
 
   async function onFinish(values: { username: string; password: string }) {
     setLoading(true)
@@ -23,7 +20,12 @@ export default function LoginPage() {
     try {
       const { tokens, user } = await login(values)
       storeLogin(user, tokens.access_token, tokens.refresh_token)
-      navigate(from, { replace: true })
+      // Clients should use the portal
+      if (user.role === 'user') {
+        navigate('/portal/tickets', { replace: true })
+      } else {
+        navigate('/dashboard', { replace: true })
+      }
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -37,7 +39,7 @@ export default function LoginPage() {
       <Card style={{ width: 400, boxShadow: '0 4px 16px rgba(0,0,0,.1)' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <Title level={2} style={{ color: '#1677ff', margin: 0 }}>Service Desk</Title>
-          <Typography.Text type="secondary">Система управления заявками</Typography.Text>
+          <Typography.Text type="secondary">Вход для сотрудников</Typography.Text>
         </div>
 
         {error && (
@@ -57,6 +59,14 @@ export default function LoginPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        <Divider style={{ margin: '20px 0 12px' }} />
+        <div style={{ textAlign: 'center' }}>
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            Клиент?{' '}
+            <Typography.Link href="/portal/login">Войти в клиентский портал</Typography.Link>
+          </Typography.Text>
+        </div>
       </Card>
     </div>
   )

@@ -2,11 +2,9 @@ import asyncio
 import os
 import tempfile
 
-os.environ.setdefault("TESTING", "true")
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+asyncpg://servicedesk:servicedesk@postgres:5432/servicedesk_test",
-)
+os.environ["TESTING"] = "true"
+# Always force test DB — never touch production servicedesk database
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://servicedesk:servicedesk@postgres:5432/servicedesk_test"
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only-min-32-chars!!")
 os.environ.setdefault("UPLOAD_PATH", tempfile.mkdtemp(prefix="sd_test_uploads_"))
 

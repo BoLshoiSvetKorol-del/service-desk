@@ -2,9 +2,11 @@ from app.models.department import Department  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.priority import Priority  # noqa: F401
 from app.models.ticket_type import TicketType  # noqa: F401
+from app.models.tag import Tag, ticket_tags  # noqa: F401
 from app.models.ticket import Ticket  # noqa: F401
 from app.models.ticket_history import TicketHistory  # noqa: F401
 from app.models.comment import Comment  # noqa: F401
 from app.models.attachment import Attachment  # noqa: F401
 from app.models.saved_filter import SavedFilter  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
+from app.models.ticket_note import TicketNote  # noqa: F401

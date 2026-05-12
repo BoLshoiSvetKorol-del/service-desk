@@ -46,3 +46,7 @@ backend/alembic/versions/__pycache__/
 # Claude
 .claude/
 SD_extracted.txt
+
+# Debug / temp scripts
+check_server*.py
+docs/session_log.md

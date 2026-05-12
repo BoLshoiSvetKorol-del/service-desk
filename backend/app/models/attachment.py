@@ -21,4 +21,4 @@ class Attachment(Base):
 
     ticket: Mapped["Ticket"] = relationship("Ticket", foreign_keys=[ticket_id])  # noqa: F821
     comment: Mapped["Comment | None"] = relationship("Comment", back_populates="attachments")  # noqa: F821
-    uploader: Mapped["User | None"] = relationship("User", foreign_keys=[uploaded_by])  # noqa: F821
+    uploader: Mapped["User | None"] = relationship("User", foreign_keys=[uploaded_by], lazy="selectin")  # noqa: F821

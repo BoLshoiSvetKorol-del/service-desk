@@ -3,6 +3,7 @@ import { Result } from 'antd'
 import { useAuthStore } from '../store/authStore'
 import { UserRole } from '../types/user'
 import AppLayout from '../components/common/Layout/AppLayout'
+import PortalLayout from '../components/Portal/PortalLayout'
 import LoginPage from '../pages/Login'
 import DashboardPage from '../pages/Dashboard'
 import SettingsPage from '../pages/Settings'
@@ -10,11 +11,47 @@ import TicketsListPage from '../pages/Tickets/TicketsList'
 import CreateTicketPage from '../pages/Tickets/CreateTicket'
 import TicketDetailPage from '../pages/Tickets/TicketDetail'
 import ReportsPage from '../pages/Reports'
+import PortalLoginPage from '../pages/Portal/PortalLoginPage'
+import PortalRegisterPage from '../pages/Portal/PortalRegisterPage'
+import PortalVerifyPage from '../pages/Portal/PortalVerifyPage'
+import PortalTicketsPage from '../pages/Portal/PortalTicketsPage'
+import PortalCreateTicketPage from '../pages/Portal/PortalCreateTicketPage'
+import PortalTicketDetailPage from '../pages/Portal/PortalTicketDetailPage'
+import PortalProfilePage from '../pages/Portal/PortalProfilePage'
 
+/** Redirect unauthenticated users to login */
 function PrivateRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const user = useAuthStore((s) => s.user)
   const location = useLocation()
+
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />
+
+  // Users (clients) belong in the portal
+  if (user?.role === 'user' && !location.pathname.startsWith('/portal')) {
+    return <Navigate to="/portal/tickets" replace />
+  }
+
+  return <Outlet />
+}
+
+/** Portal-specific guard: must be authenticated as role=user */
+function PortalRoute() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const user = useAuthStore((s) => s.user)
+  const location = useLocation()
+
+  if (!isAuthenticated) return <Navigate to="/portal/login" state={{ from: location }} replace />
+
+  if (user?.role !== 'user') {
+    return <Result
+      status="403"
+      title="Недоступно"
+      subTitle="Этот раздел предназначен только для клиентов."
+      extra={<a href="/dashboard">Перейти в основной интерфейс</a>}
+    />
+  }
+
   return <Outlet />
 }
 
@@ -27,10 +64,13 @@ function RoleRoute({ roles }: { roles: UserRole[] }) {
 }
 
 export const router = createBrowserRouter([
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
+  // Public routes
+  { path: '/login', element: <LoginPage /> },
+  { path: '/portal/login', element: <PortalLoginPage /> },
+  { path: '/portal/register', element: <PortalRegisterPage /> },
+  { path: '/portal/verify', element: <PortalVerifyPage /> },
+
+  // Agent / Admin routes (PrivateRoute blocks clients and redirects them to portal)
   {
     element: <PrivateRoute />,
     children: [
@@ -58,5 +98,23 @@ export const router = createBrowserRouter([
       },
     ],
   },
+
+  // Client portal routes
+  {
+    element: <PortalRoute />,
+    children: [
+      {
+        element: <PortalLayout />,
+        children: [
+          { path: '/portal/tickets', element: <PortalTicketsPage /> },
+          { path: '/portal/tickets/new', element: <PortalCreateTicketPage /> },
+          { path: '/portal/tickets/:id', element: <PortalTicketDetailPage /> },
+          { path: '/portal/profile', element: <PortalProfilePage /> },
+          { path: '/portal', element: <Navigate to="/portal/tickets" replace /> },
+        ],
+      },
+    ],
+  },
+
   { path: '*', element: <Navigate to="/" replace /> },
 ])

@@ -37,3 +37,16 @@ export async function toggleUserActive(id: number, is_active: boolean): Promise<
   const res = await client.patch<User>(`/users/${id}/activate`, { is_active })
   return res.data
 }
+
+export interface UserMeUpdateRequest {
+  full_name?: string
+  email?: string
+  password?: string
+  phone?: string | null
+  contact_info?: string | null
+}
+
+export async function updateMe(data: UserMeUpdateRequest): Promise<User> {
+  const res = await client.put<User>('/users/me', data)
+  return res.data
+}

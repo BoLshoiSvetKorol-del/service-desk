@@ -45,6 +45,11 @@ export async function getTicketHistory(id: number): Promise<TicketHistory[]> {
   return res.data
 }
 
+export async function getTicketAttachments(ticketId: number): Promise<Attachment[]> {
+  const res = await client.get<Attachment[]>(`/tickets/${ticketId}/attachments`)
+  return res.data
+}
+
 export async function uploadTicketAttachment(ticketId: number, file: File): Promise<Attachment> {
   const formData = new FormData()
   formData.append('file', file)
@@ -66,4 +71,19 @@ export async function downloadAttachment(id: number, filename: string): Promise<
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+export async function mergeTicket(id: number, targetId: number, comment?: string): Promise<Ticket> {
+  const res = await client.post<Ticket>(`/tickets/${id}/merge`, { target_id: targetId, comment })
+  return res.data
+}
+
+export async function getMergedTickets(id: number): Promise<TicketListItem[]> {
+  const res = await client.get<TicketListItem[]>(`/tickets/${id}/merged`)
+  return res.data
+}
+
+export async function findDuplicates(id: number, q?: string): Promise<TicketListItem[]> {
+  const res = await client.get<TicketListItem[]>(`/tickets/${id}/duplicates`, { params: q ? { q } : {} })
+  return res.data
 }

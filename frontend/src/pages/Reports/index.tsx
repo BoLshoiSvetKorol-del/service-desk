@@ -103,8 +103,8 @@ function AvgResolutionChart({ data }: { data: AvgResolutionDataPoint[] }) {
           <Col key={item.priority} xs={12} sm={6}>
             <Statistic
               title={label}
-              value={item.avg_hours.toFixed(1)}
-              suffix="ч"
+              value={item.avg_hours != null ? item.avg_hours.toFixed(1) : '—'}
+              suffix={item.avg_hours != null ? 'ч' : ''}
               valueStyle={{ color }}
             />
           </Col>
@@ -137,7 +137,7 @@ function SLAComplianceBlock({ data }: { data: SLAComplianceData | null }) {
 }
 
 export default function ReportsPage() {
-  const [params, setParams] = useState<ReportParams>({ group_by: 'day' })
+  const [params, setParams] = useState<ReportParams>({ groupby: 'day' })
   const [departments, setDepartments] = useState<Department[]>([])
   const [countData, setCountData] = useState<CountDataPoint[]>([])
   const [statusData, setStatusData] = useState<StatusDataPoint[]>([])
@@ -228,9 +228,9 @@ export default function ReportsPage() {
             options={departments.map(d => ({ value: d.id, label: d.name }))}
           />
           <Select
-            value={params.group_by ?? 'day'}
+            value={params.groupby ?? 'day'}
             style={{ width: 140 }}
-            onChange={v => setParams(prev => ({ ...prev, group_by: v }))}
+            onChange={v => setParams(prev => ({ ...prev, groupby: v }))}
             options={[
               { value: 'day', label: 'По дням' },
               { value: 'week', label: 'По неделям' },

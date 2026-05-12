@@ -36,6 +36,12 @@ export default function CommentForm({ ticketId, onCommentCreated }: Props) {
         is_internal: canMarkInternal ? isInternal : false,
       })
 
+      // Добавляем комментарий в список ДО загрузки файлов, чтобы SSE-дедупликация сработала
+      onCommentCreated(comment)
+      setBody('')
+      setIsInternal(false)
+      setFileList([])
+
       for (const f of fileList) {
         if (f.originFileObj) {
           try {
@@ -45,11 +51,6 @@ export default function CommentForm({ ticketId, onCommentCreated }: Props) {
           }
         }
       }
-
-      onCommentCreated(comment)
-      setBody('')
-      setIsInternal(false)
-      setFileList([])
     } catch (e) {
       message.error(getErrorMessage(e))
     } finally {

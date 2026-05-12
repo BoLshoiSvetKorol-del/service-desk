@@ -20,6 +20,7 @@ const STATUS_COLORS: Record<TicketStatus, string> = {
   waiting_info: '#d48806',
   resolved: '#52c41a',
   cancelled: '#8c8c8c',
+  merged: '#722ed1',
 }
 
 const PRIORITY_COLORS: Record<PriorityName, string> = {

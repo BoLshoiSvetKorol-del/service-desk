@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
@@ -11,9 +12,10 @@ logger = logging.getLogger(__name__)
 # Человекочитаемые описания событий
 _EVENT_MESSAGES = {
     "ticket_created": "Заявка {number} создана",
-    "ticket_status_changed": "Заявка {number}: статус изменён на «{new_status}»",
+    "ticket_status_changed": "{actor_name} изменил статус заявки {number} на «{new_status}»",
     "ticket_assigned": "Заявка {number} назначена на вас",
-    "new_comment": "Новый комментарий к заявке {number}",
+    "new_comment": "{actor_name} оставил комментарий к заявке {number}",
+    "new_attachment": "{actor_name} прикрепил файл «{filename}» к заявке {number}",
     "sla_warning": "Заявка {number}: SLA истекает менее чем через 1 час",
     "sla_violated": "Заявка {number}: SLA нарушен",
 }
@@ -55,15 +57,19 @@ async def notify_ticket_event(
 ) -> None:
     """Создать уведомления в БД + опубликовать SSE для всех получателей."""
     extra = extra or {}
+    actor_name = actor.full_name or actor.username
     msg_template = _EVENT_MESSAGES.get(event_type, "Событие по заявке {number}")
-    message = msg_template.format(number=ticket.number, **extra)
+    try:
+        message = msg_template.format(number=ticket.number, actor_name=actor_name, **extra)
+    except KeyError:
+        message = f"Событие по заявке {ticket.number}"
 
-    sse_data = {"ticket_id": ticket.id, "ticket_number": ticket.number, **extra}
+    sse_data = {"ticket_id": ticket.id, "ticket_number": ticket.number, "actor_name": actor_name, **extra}
 
     # Определяем получателей
     recipients: set[int] = set()
 
-    if event_type in ("ticket_status_changed", "new_comment"):
+    if event_type in ("ticket_status_changed", "new_comment", "new_attachment"):
         # Заявитель (если не он сам инициатор)
         if ticket.requester_id != actor.id:
             recipients.add(ticket.requester_id)
@@ -80,11 +86,22 @@ async def notify_ticket_event(
 
     # Создаём уведомления в БД и публикуем SSE каждому получателю
     for user_id in recipients:
-        await create_notification(db, user_id, ticket.id, event_type, message)
+        notif = await create_notification(db, user_id, ticket.id, event_type, message)
         await publish_sse(redis, f"sse:user:{user_id}", event_type, sse_data)
+        # Отдельное notification-событие для обновления колокольчика в реальном времени
+        await publish_sse(redis, f"sse:user:{user_id}", "notification", {
+            "id": notif.id,
+            "ticket_id": ticket.id,
+            "event_type": event_type,
+            "message": message,
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "actor_name": actor_name,
+        })
 
     # Публикуем в канал отдела (для агентов дежурного отдела)
-    if ticket.department_id:
+    # ticket_assigned — только личное уведомление, не дублируем в отдел
+    if ticket.department_id and event_type != "ticket_assigned":
         await publish_sse(redis, f"sse:department:{ticket.department_id}", event_type, sse_data)
 
     await db.commit()

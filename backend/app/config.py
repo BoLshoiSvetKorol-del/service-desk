@@ -15,8 +15,20 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
 
+    # Email via SendGrid
     SENDGRID_API_KEY: str = ""
     MAIL_FROM: str = "noreply@servicedesk.local"
+    MAIL_FROM_NAME: str = "Service Desk"
+
+    # Email via SMTP (альтернатива SendGrid)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_TLS: bool = True
+
+    # Базовый URL для ссылок в письмах
+    PORTAL_URL: str = "http://localhost"
 
     STORAGE_BACKEND: str = "local"
     UPLOAD_PATH: str = "/app/uploads"

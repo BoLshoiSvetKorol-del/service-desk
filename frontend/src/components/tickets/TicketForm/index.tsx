@@ -39,6 +39,8 @@ export default function TicketForm({ onSubmit, loading }: Props) {
     }
   }
 
+
+
   function handlePriorityChange(priorityId: number) {
     const p = priorities.find(pr => pr.id === priorityId) ?? null
     setSelectedPriority(p)
@@ -47,7 +49,7 @@ export default function TicketForm({ onSubmit, loading }: Props) {
   async function handleFinish(values: {
     title: string
     description: string
-    ticket_type_id?: number
+    type_id: number
     priority_id: number
     department_id?: number
   }) {
@@ -60,7 +62,7 @@ export default function TicketForm({ onSubmit, loading }: Props) {
         {
           title: values.title,
           description: values.description,
-          ticket_type_id: values.ticket_type_id ?? null,
+          type_id: values.type_id,
           priority_id: values.priority_id,
           department_id: values.department_id ?? null,
         },
@@ -81,10 +83,9 @@ export default function TicketForm({ onSubmit, loading }: Props) {
         <TextArea rows={5} placeholder="Подробное описание: что произошло, что ожидалось, шаги воспроизведения..." />
       </Form.Item>
 
-      <Form.Item name="ticket_type_id" label="Тип заявки">
+      <Form.Item name="type_id" label="Тип заявки" rules={[{ required: true, message: 'Выберите тип заявки' }]}>
         <Select
-          placeholder="Выберите тип (необязательно)"
-          allowClear
+          placeholder="Выберите тип заявки"
           onChange={handleTypeChange}
           options={ticketTypes.map(t => ({ value: t.id, label: t.name }))}
         />

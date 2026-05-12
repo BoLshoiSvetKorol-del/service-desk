@@ -1,7 +1,7 @@
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 import redis.asyncio as aioredis
 
 from app.database import get_db
@@ -11,9 +11,10 @@ from app.models.user import User, UserRole
 from app.schemas.ticket import (
     TicketCreate, TicketUpdate, TicketResponse, TicketListItem,
     StatusChangeRequest, AssignRequest, PriorityChangeRequest, TicketHistoryResponse,
+    MergeRequest,
 )
 from app.services.ticket_service import (
-    create_ticket, change_status, assign_ticket, get_tickets, _check_ticket_access,
+    create_ticket, change_status, assign_ticket, get_tickets, merge_ticket, _check_ticket_access,
 )
 from app.services.notification_service import notify_ticket_event
 from app.redis import get_redis
@@ -174,7 +175,7 @@ async def change_ticket_priority(
     if not priority:
         raise HTTPException(status_code=404, detail="Приоритет не найден")
 
-    old_priority = ticket.priority_id
+    old_priority = await db.get(Priority, ticket.priority_id)
     ticket.priority_id = data.priority_id
 
     from app.models.ticket_history import TicketHistory
@@ -182,7 +183,12 @@ async def change_ticket_priority(
         ticket_id=ticket.id,
         user_id=current_user.id,
         event_type="priority_changed",
-        payload={"old_priority_id": old_priority, "new_priority_id": data.priority_id},
+        payload={
+            "old_priority_id": old_priority.id if old_priority else None,
+            "new_priority_id": data.priority_id,
+            "old_priority_name": old_priority.level.value if old_priority else None,
+            "new_priority_name": priority.level.value,
+        },
     ))
     await db.commit()
     await db.refresh(ticket)
@@ -206,3 +212,62 @@ async def get_ticket_history(
         .order_by(TicketHistory.created_at)
     )
     return [TicketHistoryResponse.model_validate(h) for h in result.scalars().all()]
+
+
+@router.post("/{ticket_id}/merge", response_model=TicketResponse)
+async def merge_ticket_endpoint(
+    ticket_id: int,
+    data: MergeRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    ticket = await db.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    _check_ticket_access(ticket, current_user)
+    updated = await merge_ticket(db, ticket, data.target_id, current_user, data.comment)
+    await notify_ticket_event(db, redis, updated, "ticket_merged", current_user,
+                              {"merged_into_id": data.target_id})
+    return TicketResponse.model_validate(updated)
+
+
+@router.get("/{ticket_id}/merged", response_model=list[TicketListItem])
+async def get_merged_tickets(
+    ticket_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ticket = await db.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    _check_ticket_access(ticket, current_user)
+    result = await db.execute(
+        select(Ticket).where(Ticket.merged_into_id == ticket_id).order_by(Ticket.created_at)
+    )
+    return [TicketListItem.model_validate(t) for t in result.scalars().all()]
+
+
+@router.get("/{ticket_id}/duplicates", response_model=list[TicketListItem])
+async def find_duplicates(
+    ticket_id: int,
+    q: str = Query(default="", max_length=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    ticket = await db.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    query = select(Ticket).where(
+        Ticket.id != ticket_id,
+        Ticket.status.notin_([TicketStatus.merged, TicketStatus.resolved, TicketStatus.cancelled]),
+    )
+    if q:
+        pattern = f"%{q}%"
+        query = query.where(
+            or_(Ticket.number.ilike(pattern), Ticket.title.ilike(pattern))
+        )
+    query = query.order_by(Ticket.created_at.desc()).limit(20)
+    result = await db.execute(query)
+    return [TicketListItem.model_validate(t) for t in result.scalars().all()]

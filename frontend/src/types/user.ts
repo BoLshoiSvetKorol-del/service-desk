@@ -7,9 +7,12 @@ export interface User {
   full_name: string
   role: UserRole
   department_id: number | null
+  phone: string | null
+  contact_info: string | null
   is_active: boolean
+  is_email_verified: boolean
   created_at: string
-  updated_at: string
+  updated_at?: string
 }
 
 export interface Department {

@@ -27,6 +27,7 @@ async def seed_admin(db: AsyncSession) -> None:
         full_name=settings.ADMIN_FULL_NAME,
         role=UserRole.admin,
         is_active=True,
+        is_email_verified=True,
     )
     db.add(admin)
     await db.commit()
@@ -38,7 +39,10 @@ class AuthService:
         self.redis = redis
 
     async def login(self, username: str, password: str) -> tuple[str, str, User] | None:
-        user = await self.db.scalar(select(User).where(User.username == username))
+        from sqlalchemy import or_
+        user = await self.db.scalar(
+            select(User).where(or_(User.username == username, User.email == username))
+        )
         if not user or not verify_password(password, user.password_hash):
             return None
         if not user.is_active:

@@ -35,8 +35,12 @@ export default function SLACountdown({ slaDeadline, slaViolated, createdAt }: Pr
   const total = deadline - created
   const remaining = deadline - now
 
-  if (slaViolated || remaining <= 0) {
+  if (slaViolated) {
     return <Tag color="red">Просрочено</Tag>
+  }
+
+  if (remaining <= 0) {
+    return null
   }
 
   const pct = remaining / total

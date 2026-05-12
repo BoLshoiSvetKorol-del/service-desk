@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { notification } from 'antd'
 import { getAccessToken } from '../api/client'
 import { useNotificationStore } from '../store/notificationStore'
+import { useTicketEventStore } from '../store/ticketEventStore'
 import type { AppNotification } from '../store/notificationStore'
 
 interface SSEMessage {
@@ -30,6 +31,7 @@ function parseSSEMessages(raw: string): SSEMessage[] {
 
 export function useSSE() {
   const addNotification = useNotificationStore(s => s.addNotification)
+  const publishEvent = useTicketEventStore(s => s.publishEvent)
 
   useEffect(() => {
     let aborted = false
@@ -95,6 +97,12 @@ export function useSSE() {
           break
         }
         case 'ticket_status_changed':
+          publishEvent({
+            type: 'status_changed',
+            ticketId: data.ticket_id as number,
+            ticketNumber: String(data.ticket_number ?? ''),
+            payload: data,
+          })
           notification.info({
             message: 'Статус заявки изменён',
             description: `${data.ticket_number ?? ''}: ${data.new_status ?? ''}`,
@@ -102,6 +110,12 @@ export function useSSE() {
           })
           break
         case 'ticket_assigned':
+          publishEvent({
+            type: 'assigned',
+            ticketId: data.ticket_id as number,
+            ticketNumber: String(data.ticket_number ?? ''),
+            payload: data,
+          })
           notification.info({
             message: 'Назначение обновлено',
             description: String(data.ticket_number ?? ''),
@@ -109,9 +123,29 @@ export function useSSE() {
           })
           break
         case 'new_comment':
+          publishEvent({
+            type: 'new_comment',
+            ticketId: data.ticket_id as number,
+            ticketNumber: String(data.ticket_number ?? ''),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            comment: data.comment as any,
+          })
           notification.info({
-            message: 'Новый комментарий',
+            message: `Новый комментарий — ${data.actor_name ?? ''}`,
             description: String(data.ticket_number ?? ''),
+            placement: 'topRight',
+          })
+          break
+        case 'new_attachment':
+          publishEvent({
+            type: 'new_attachment',
+            ticketId: data.ticket_id as number,
+            ticketNumber: String(data.ticket_number ?? ''),
+            payload: data,
+          })
+          notification.info({
+            message: `Новое вложение — ${data.actor_name ?? ''}`,
+            description: `${data.ticket_number ?? ''}: ${data.filename ?? ''}`,
             placement: 'topRight',
           })
           break
@@ -141,5 +175,5 @@ export function useSSE() {
       abortController.abort()
       if (reconnectTimer) clearTimeout(reconnectTimer)
     }
-  }, [addNotification])
+  }, [addNotification, publishEvent])
 }

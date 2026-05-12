@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  Button, Card, Col, Descriptions, Divider, Dropdown, Row,
+  Alert, Button, Card, Col, Descriptions, Divider, Dropdown, Row,
   Select, Skeleton, Space, Tabs, Tag, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, DownOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, DownOutlined, MergeCellsOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTicketEventStore } from '../../../store/ticketEventStore'
 import {
   getTicket, changeTicketStatus, assignTicket, changeTicketPriority,
-  getTicketHistory, deleteAttachment,
+  getTicketHistory, deleteAttachment, getTicketAttachments,
 } from '../../../api/tickets'
 import { getPriorities } from '../../../api/priorities'
 import { getDepartments } from '../../../api/departments'
@@ -15,6 +16,13 @@ import { getUsers } from '../../../api/users'
 import { getComments } from '../../../api/comments'
 import type { Ticket, TicketStatus, Priority, Comment, TicketHistory } from '../../../types/ticket'
 import { STATUS_TRANSITIONS, STATUS_LABELS, PRIORITY_LABELS } from '../../../types/ticket'
+
+function getAllowedTransitions(status: TicketStatus, role: string | undefined): TicketStatus[] {
+  const all = STATUS_TRANSITIONS[status] ?? []
+  // resolved → in_progress only for user and admin, not agent
+  if (status === 'resolved' && role === 'agent') return []
+  return all
+}
 import type { Department, User } from '../../../types/user'
 import { useAuthStore } from '../../../store/authStore'
 import StatusBadge from '../../../components/common/StatusBadge'
@@ -24,6 +32,9 @@ import CommentList from '../../../components/tickets/CommentList'
 import CommentForm from '../../../components/tickets/CommentForm'
 import AttachmentList from '../../../components/tickets/AttachmentList'
 import ActivityTimeline from '../../../components/tickets/ActivityTimeline'
+import MergeModal from '../../../components/tickets/MergeModal'
+import TagSelector from '../../../components/tickets/TagSelector'
+import NotesTab from '../../../components/tickets/NotesTab'
 import { getErrorMessage } from '../../../types/common'
 
 function formatDate(d: string) {
@@ -42,11 +53,39 @@ export default function TicketDetailPage() {
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [history, setHistory] = useState<TicketHistory[]>([])
+  const [attachments, setAttachments] = useState<import('../../../types/ticket').Attachment[]>([])
   const [loading, setLoading] = useState(true)
   const [priorities, setPriorities] = useState<Priority[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [agents, setAgents] = useState<User[]>([])
   const [actionLoading, setActionLoading] = useState(false)
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const lastTicketEvent = useTicketEventStore(s => s.lastEvent)
+
+  // Real-time: react to SSE events for this ticket
+  useEffect(() => {
+    if (!lastTicketEvent || !ticket) return
+    if (lastTicketEvent.ticketId !== ticket.id) return
+
+    if (lastTicketEvent.type === 'new_comment' && lastTicketEvent.comment) {
+      const incoming = lastTicketEvent.comment
+      // Не добавляем собственные комментарии: они уже добавлены через onCommentCreated
+      if (incoming.author_id === currentUser?.id) return
+      setComments(prev => {
+        if (prev.some(c => c.id === incoming.id)) return prev
+        return [...prev, incoming]
+      })
+    } else if (lastTicketEvent.type === 'new_attachment') {
+      getTicketAttachments(ticket.id).then(setAttachments).catch(() => {})
+    } else if (
+      lastTicketEvent.type === 'status_changed' ||
+      lastTicketEvent.type === 'assigned' ||
+      lastTicketEvent.type === 'priority_changed'
+    ) {
+      getTicket(ticket.id).then(setTicket).catch(() => {})
+      getTicketHistory(ticket.id).then(setHistory).catch(() => {})
+    }
+  }, [lastTicketEvent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!id) return
@@ -58,16 +97,18 @@ export default function TicketDetailPage() {
       getUsers({ page_size: 100 }),
       getComments(Number(id)),
       getTicketHistory(Number(id)),
+      getTicketAttachments(Number(id)),
     ])
-      .then(([t, ps, ds, us, cs, hist]) => {
+      .then(([t, ps, ds, us, cs, hist, atts]) => {
         setTicket(t)
         setPriorities(ps)
         setDepartments(ds)
         setAgents(us.items.filter(u => u.role !== 'user'))
         setComments(cs)
         setHistory(hist)
+        setAttachments(atts)
       })
-      .catch(() => message.error('Ошибка загрузки заявки'))
+      .catch((e) => message.error('Ошибка загрузки заявки: ' + (e?.response?.data?.detail ?? e?.message ?? 'неизвестная ошибка')))
       .finally(() => setLoading(false))
   }, [id])
 
@@ -128,10 +169,9 @@ export default function TicketDetailPage() {
   }
 
   async function handleDeleteAttachment(attachmentId: number) {
-    if (!ticket) return
     try {
       await deleteAttachment(attachmentId)
-      setTicket({ ...ticket, attachments: ticket.attachments?.filter(a => a.id !== attachmentId) })
+      setAttachments(prev => prev.filter(a => a.id !== attachmentId))
       message.success('Файл удалён')
     } catch (e) {
       message.error(getErrorMessage(e))
@@ -141,8 +181,8 @@ export default function TicketDetailPage() {
   if (loading) return <Skeleton active paragraph={{ rows: 12 }} />
   if (!ticket) return <Typography.Text type="danger">Заявка не найдена</Typography.Text>
 
-  const nextStatuses = STATUS_TRANSITIONS[ticket.status]
-  const attachments = ticket.attachments ?? []
+  const nextStatuses = getAllowedTransitions(ticket.status, currentUser?.role)
+  const canMerge = canEdit && !['merged', 'resolved', 'cancelled'].includes(ticket.status)
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
@@ -154,6 +194,37 @@ export default function TicketDetailPage() {
       >
         К списку заявок
       </Button>
+
+      {ticket.status === 'merged' && ticket.merged_into_id && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={
+            <span>
+              Эта заявка объединена с&nbsp;
+              <Button
+                type="link"
+                style={{ padding: 0, height: 'auto' }}
+                onClick={() => navigate(`/tickets/${ticket.merged_into_id}`)}
+              >
+                #{ticket.merged_into_id}
+              </Button>
+            </span>
+          }
+        />
+      )}
+
+      {showMergeModal && (
+        <MergeModal
+          ticketId={ticket.id}
+          onMerged={() => {
+            setShowMergeModal(false)
+            getTicket(ticket.id).then(setTicket).catch(() => {})
+          }}
+          onClose={() => setShowMergeModal(false)}
+        />
+      )}
 
       {/* Header */}
       <Card style={{ marginBottom: 16 }}>
@@ -171,6 +242,15 @@ export default function TicketDetailPage() {
                 slaViolated={ticket.sla_violated}
                 createdAt={ticket.created_at}
               />
+              {canMerge && (
+                <Button
+                  icon={<MergeCellsOutlined />}
+                  onClick={() => setShowMergeModal(true)}
+                  disabled={actionLoading}
+                >
+                  Объединить
+                </Button>
+              )}
               {nextStatuses.length > 0 ? (
                 <Dropdown
                   menu={{
@@ -247,6 +327,11 @@ export default function TicketDetailPage() {
                 label: 'История',
                 children: <ActivityTimeline history={history} />,
               },
+              ...(canEdit ? [{
+                key: 'notes',
+                label: 'Заметки',
+                children: <NotesTab ticketId={ticket.id} />,
+              }] : []),
             ]}
           />
         </Col>
@@ -336,6 +421,26 @@ export default function TicketDetailPage() {
                   {formatDate(ticket.closed_at)}
                 </Descriptions.Item>
               )}
+
+              <Descriptions.Item label="Теги">
+                {canEdit ? (
+                  <TagSelector
+                    ticketId={ticket.id}
+                    currentTags={ticket.tags}
+                    onChange={tags => setTicket(prev => prev ? { ...prev, tags } : prev)}
+                    disabled={actionLoading}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {ticket.tags.length === 0
+                      ? <span style={{ color: '#bbb' }}>—</span>
+                      : ticket.tags.map(tag => (
+                          <Tag key={tag.id} color={tag.color_hex}>{tag.name}</Tag>
+                        ))
+                    }
+                  </div>
+                )}
+              </Descriptions.Item>
             </Descriptions>
 
             {ticket.sla_paused_at && (

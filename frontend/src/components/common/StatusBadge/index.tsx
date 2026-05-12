@@ -8,6 +8,7 @@ const STATUS_COLORS: Record<TicketStatus, string> = {
   waiting_info: 'gold',
   resolved: 'green',
   cancelled: 'default',
+  merged: 'purple',
 }
 
 export default function StatusBadge({ status }: { status: TicketStatus }) {

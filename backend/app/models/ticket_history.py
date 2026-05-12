@@ -19,4 +19,4 @@ class TicketHistory(Base):
     )
 
     ticket: Mapped["Ticket"] = relationship("Ticket", back_populates="history")  # noqa: F821
-    actor: Mapped["User | None"] = relationship("User", foreign_keys=[user_id])  # noqa: F821
+    actor: Mapped["User | None"] = relationship("User", foreign_keys=[user_id], lazy="selectin")  # noqa: F821

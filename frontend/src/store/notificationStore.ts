@@ -7,6 +7,7 @@ export interface AppNotification {
   message: string
   is_read: boolean
   created_at: string
+  actor_name?: string
 }
 
 interface NotificationState {

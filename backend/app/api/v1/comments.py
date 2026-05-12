@@ -102,7 +102,9 @@ async def create_comment(
 
     # SSE + уведомление в БД
     if not data.is_internal:
-        await notify_ticket_event(db, redis, ticket, "new_comment", current_user)
+        comment_data = CommentResponse.model_validate(comment).model_dump(mode="json")
+        await notify_ticket_event(db, redis, ticket, "new_comment", current_user,
+                                  {"comment": comment_data})
 
     return CommentResponse.model_validate(comment)
 

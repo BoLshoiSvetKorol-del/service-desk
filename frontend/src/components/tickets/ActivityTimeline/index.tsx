@@ -2,7 +2,7 @@ import { Timeline, Typography } from 'antd'
 import {
   FileAddOutlined, SwapOutlined, UserOutlined, ExclamationCircleOutlined,
   CommentOutlined, PaperClipOutlined, InfoCircleOutlined, CheckCircleOutlined,
-  CloseCircleOutlined,
+  CloseCircleOutlined, MergeCellsOutlined,
 } from '@ant-design/icons'
 import type { TicketHistory, TicketStatus, PriorityName } from '../../../types/ticket'
 import { STATUS_LABELS, PRIORITY_LABELS } from '../../../types/ticket'
@@ -15,27 +15,31 @@ function formatDate(d: string) {
 }
 
 function describeEvent(event: TicketHistory): string {
-  const p = event.payload
+  const p = event.payload ?? {}
   switch (event.event_type) {
     case 'created':
       return 'Заявка создана'
     case 'status_changed': {
-      const from = STATUS_LABELS[p.old_status as TicketStatus] ?? p.old_status
-      const to = STATUS_LABELS[p.new_status as TicketStatus] ?? p.new_status
+      const from = STATUS_LABELS[p.old_status as TicketStatus] ?? p.old_status ?? '?'
+      const to = STATUS_LABELS[p.new_status as TicketStatus] ?? p.new_status ?? '?'
       return `Статус изменён: ${from} → ${to}`
     }
     case 'assigned': {
       const parts: string[] = []
-      if (p.assignee_name) parts.push(`Исполнитель: ${p.assignee_name}`)
-      else if ('assignee_id' in p && p.assignee_id === null) parts.push('Исполнитель снят')
-      if (p.department_name) parts.push(`Отдел: ${p.department_name}`)
+      if (p.new_assignee_name) parts.push(`Исполнитель: ${p.new_assignee_name}`)
+      else if ('new_assignee_id' in p && p.new_assignee_id === null) parts.push('Исполнитель снят')
+      if (p.new_department_name) parts.push(`Отдел: ${p.new_department_name}`)
       return parts.join(', ') || 'Назначение обновлено'
     }
     case 'priority_changed': {
-      const from = PRIORITY_LABELS[p.old_priority as PriorityName] ?? p.old_priority
-      const to = PRIORITY_LABELS[p.new_priority as PriorityName] ?? p.new_priority
+      const from = PRIORITY_LABELS[p.old_priority_name as PriorityName] ?? p.old_priority_name ?? '?'
+      const to = PRIORITY_LABELS[p.new_priority_name as PriorityName] ?? p.new_priority_name ?? '?'
       return `Приоритет изменён: ${from} → ${to}`
     }
+    case 'updated':
+      return 'Заявка обновлена'
+    case 'merged':
+      return `Объединена с заявкой ${p.target_number ?? ''}`
     case 'comment_added':
       return 'Добавлен комментарий'
     case 'attachment_added':
@@ -48,7 +52,7 @@ function describeEvent(event: TicketHistory): string {
 }
 
 function getEventIcon(event: TicketHistory) {
-  const p = event.payload
+  const p = event.payload ?? {}
   switch (event.event_type) {
     case 'created':
       return <FileAddOutlined style={{ color: '#52c41a' }} />
@@ -60,6 +64,8 @@ function getEventIcon(event: TicketHistory) {
       return <UserOutlined style={{ color: '#722ed1' }} />
     case 'priority_changed':
       return <ExclamationCircleOutlined style={{ color: '#fa8c16' }} />
+    case 'merged':
+      return <MergeCellsOutlined style={{ color: '#722ed1' }} />
     case 'comment_added':
       return <CommentOutlined style={{ color: '#8c8c8c' }} />
     case 'attachment_added':
@@ -71,7 +77,7 @@ function getEventIcon(event: TicketHistory) {
 }
 
 function getEventColor(event: TicketHistory): string {
-  const p = event.payload
+  const p = event.payload ?? {}
   switch (event.event_type) {
     case 'created': return 'green'
     case 'status_changed':
@@ -80,6 +86,7 @@ function getEventColor(event: TicketHistory): string {
       return 'blue'
     case 'assigned': return 'purple'
     case 'priority_changed': return 'orange'
+    case 'merged': return 'purple'
     default: return 'gray'
   }
 }

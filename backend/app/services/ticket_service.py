@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from app.models.ticket import Ticket, TicketStatus
 from app.models.ticket_history import TicketHistory
 from app.models.user import User, UserRole
-from app.models.priority import Priority
+from app.models.priority import Priority, PriorityLevel
 from app.models.ticket_type import TicketType
 from app.models.department import Department
 from app.utils.ticket_number import generate_ticket_number
@@ -30,7 +30,9 @@ def _check_ticket_access(ticket: Ticket, user: User) -> None:
     if user.role == UserRole.admin:
         return
     if user.role == UserRole.agent:
-        if ticket.department_id == user.department_id or ticket.assignee_id == user.id:
+        if (ticket.department_id == user.department_id
+                or ticket.assignee_id == user.id
+                or ticket.requester_id == user.id):
             return
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к заявке")
     if ticket.requester_id != user.id:
@@ -38,9 +40,16 @@ def _check_ticket_access(ticket: Ticket, user: User) -> None:
 
 
 async def create_ticket(db: AsyncSession, data, user: User) -> Ticket:
-    priority = await db.get(Priority, data.priority_id)
-    if not priority:
-        raise HTTPException(status_code=404, detail="Приоритет не найден")
+    if data.priority_id is not None:
+        priority = await db.get(Priority, data.priority_id)
+        if not priority:
+            raise HTTPException(status_code=404, detail="Приоритет не найден")
+    else:
+        priority = await db.scalar(select(Priority).where(Priority.level == PriorityLevel.normal))
+        if not priority:
+            priority = await db.scalar(select(Priority).order_by(Priority.id))
+        if not priority:
+            raise HTTPException(status_code=404, detail="Приоритеты не настроены")
 
     ticket_type = await db.get(TicketType, data.type_id)
     if not ticket_type:
@@ -149,7 +158,7 @@ async def change_status(
         ticket_id=ticket.id,
         user_id=user.id,
         event_type="status_changed",
-        payload={"old": old_status.value, "new": new_status.value, "comment": comment},
+        payload={"old_status": old_status.value, "new_status": new_status.value, "comment": comment},
     )
     db.add(history)
     await db.commit()
@@ -186,6 +195,8 @@ async def assign_ticket(
 ) -> Ticket:
     old_assignee = ticket.assignee_id
     old_dept = ticket.department_id
+    new_assignee_name: str | None = None
+    new_department_name: str | None = None
 
     if assignee_id is not None:
         assignee = await db.get(User, assignee_id)
@@ -194,7 +205,8 @@ async def assign_ticket(
         if assignee.role == UserRole.user:
             raise HTTPException(status_code=400, detail="Нельзя назначить роль 'user' исполнителем")
         ticket.assignee_id = assignee_id
-    elif "assignee_id" in (assignee_id,):
+        new_assignee_name = assignee.full_name or assignee.username
+    else:
         ticket.assignee_id = None
 
     if department_id is not None:
@@ -202,6 +214,7 @@ async def assign_ticket(
         if not dept:
             raise HTTPException(status_code=404, detail="Отдел не найден")
         ticket.department_id = department_id
+        new_department_name = dept.name
 
     history = TicketHistory(
         ticket_id=ticket.id,
@@ -210,8 +223,10 @@ async def assign_ticket(
         payload={
             "old_assignee_id": old_assignee,
             "new_assignee_id": ticket.assignee_id,
+            "new_assignee_name": new_assignee_name,
             "old_department_id": old_dept,
             "new_department_id": ticket.department_id,
+            "new_department_name": new_department_name,
         },
     )
     db.add(history)
@@ -247,6 +262,38 @@ async def assign_ticket(
     return ticket
 
 
+async def merge_ticket(
+    db: AsyncSession, source: Ticket, target_id: int, user: User, comment: str | None = None
+) -> Ticket:
+    if source.id == target_id:
+        raise HTTPException(status_code=400, detail="Нельзя объединить заявку с самой собой")
+
+    target = await db.get(Ticket, target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Целевая заявка не найдена")
+
+    if source.status in (TicketStatus.merged, TicketStatus.resolved, TicketStatus.cancelled):
+        raise HTTPException(status_code=422, detail=f"Нельзя объединить заявку со статусом {source.status.value}")
+
+    if target.status == TicketStatus.merged:
+        raise HTTPException(status_code=422, detail="Целевая заявка уже объединена с другой")
+
+    source.status = TicketStatus.merged
+    source.merged_into_id = target_id
+    source.closed_at = datetime.now(timezone.utc)
+
+    history = TicketHistory(
+        ticket_id=source.id,
+        user_id=user.id,
+        event_type="merged",
+        payload={"merged_into_id": target_id, "target_number": target.number, "comment": comment},
+    )
+    db.add(history)
+    await db.commit()
+    await db.refresh(source)
+    return source
+
+
 async def get_tickets(db: AsyncSession, user: User, filters: dict) -> tuple[list[Ticket], int]:
     query = select(Ticket)
 
@@ -258,6 +305,7 @@ async def get_tickets(db: AsyncSession, user: User, filters: dict) -> tuple[list
             or_(
                 Ticket.department_id == user.department_id,
                 Ticket.assignee_id == user.id,
+                Ticket.requester_id == user.id,
             )
         )
 

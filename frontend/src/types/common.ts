@@ -16,11 +16,18 @@ export interface ValidationError {
   type: string
 }
 
+function cleanMsg(msg: string): string {
+  // Убираем технические префиксы Pydantic ("Value error, ", "String should ...")
+  return msg
+    .replace(/^value error,\s*/i, '')
+    .replace(/^string should/i, 'Поле должно')
+}
+
 export function getErrorMessage(error: unknown): string {
   if (!error || typeof error !== 'object') return 'Неизвестная ошибка'
   const e = error as { response?: { data?: ApiError } }
   const detail = e.response?.data?.detail
   if (!detail) return 'Неизвестная ошибка'
   if (typeof detail === 'string') return detail
-  return detail.map(v => v.msg).join('; ')
+  return detail.map(v => cleanMsg(v.msg)).join('; ')
 }

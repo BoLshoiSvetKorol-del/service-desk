@@ -21,13 +21,33 @@ export async function login(data: LoginRequest): Promise<{ tokens: TokenResponse
   return { tokens, user: userRes.data }
 }
 
-export async function logout(): Promise<void> {
-  const refreshToken = localStorage.getItem('refreshToken')
+export async function logout(refreshToken?: string): Promise<void> {
+  const token = refreshToken ?? localStorage.getItem('refreshToken') ?? undefined
   try {
-    if (refreshToken) await client.post('/auth/logout', { refresh_token: refreshToken })
+    if (token) await client.post('/auth/logout', { refresh_token: token })
   } finally {
     clearAuthTokens()
   }
+}
+
+export interface RegisterRequest {
+  email: string
+  password: string
+  full_name: string
+}
+
+export async function register(data: RegisterRequest): Promise<User> {
+  const res = await client.post<User>('/auth/register', data)
+  return res.data
+}
+
+export async function verifyEmail(token: string): Promise<User> {
+  const res = await client.post<User>(`/auth/verify-email?token=${token}`)
+  return res.data
+}
+
+export async function resendVerification(): Promise<void> {
+  await client.post('/auth/resend-verification')
 }
 
 export async function getMe(): Promise<User> {

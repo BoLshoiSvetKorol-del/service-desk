@@ -18,5 +18,5 @@ class Comment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     ticket: Mapped["Ticket"] = relationship("Ticket", foreign_keys=[ticket_id])  # noqa: F821
-    author: Mapped["User | None"] = relationship("User", foreign_keys=[author_id])  # noqa: F821
+    author: Mapped["User | None"] = relationship("User", foreign_keys=[author_id], lazy="selectin")  # noqa: F821
     attachments: Mapped[list["Attachment"]] = relationship("Attachment", back_populates="comment", cascade="all, delete-orphan")  # noqa: F821

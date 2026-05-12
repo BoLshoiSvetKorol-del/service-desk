@@ -280,8 +280,8 @@ class TestListTickets:
         r = await client.get("/api/v1/tickets", headers=user_a["headers"])
         assert r.status_code == 200
         data = r.json()
-        requester_ids = {t["requester_id"] for t in data["items"]}
-        assert requester_ids == {user_a["id"]}
+        creator_ids = {t["creator_id"] for t in data["items"]}
+        assert creator_ids == {user_a["id"]}
 
     async def test_agent_sees_dept_tickets(self, client: AsyncClient):
         admin = await _auth(client)
@@ -605,7 +605,7 @@ class TestChangePriority:
             headers=admin,
         )
         assert r.status_code == 200
-        assert r.json()["priority_id"] == critical_id
+        assert r.json()["priority"]["id"] == critical_id
 
     async def test_agent_can_change_priority(self, client: AsyncClient):
         admin = await _auth(client)
@@ -622,7 +622,7 @@ class TestChangePriority:
             headers=agent["headers"],
         )
         assert r.status_code == 200
-        assert r.json()["priority_id"] == high_id
+        assert r.json()["priority"]["id"] == high_id
 
     async def test_user_cannot_change_priority(self, client: AsyncClient):
         admin = await _auth(client)
@@ -708,5 +708,5 @@ class TestTicketHistory:
         )
         r = await client.get(f"/api/v1/tickets/{ticket['id']}/history", headers=admin)
         status_event = next(e for e in r.json() if e["event_type"] == "status_changed")
-        assert status_event["payload"]["old"] == "new"
-        assert status_event["payload"]["new"] == "in_progress"
+        assert status_event["payload"]["old_status"] == "new"
+        assert status_event["payload"]["new_status"] == "in_progress"

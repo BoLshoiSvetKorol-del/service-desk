@@ -212,16 +212,27 @@ async def export_tickets(
 
     data = [[_fmt(cell) for cell in row] for row in rows]
 
+    # Формируем метку периода для имени файла
+    if date_from and date_to:
+        period_label = f"{date_from.strftime('%d.%m.%Y')}-{date_to.strftime('%d.%m.%Y')}"
+    elif date_from:
+        period_label = f"от_{date_from.strftime('%d.%m.%Y')}"
+    elif date_to:
+        period_label = f"по_{date_to.strftime('%d.%m.%Y')}"
+    else:
+        period_label = date.today().strftime('%d.%m.%Y')
+
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(headers_row)
         writer.writerows(data)
         output.seek(0)
+        fname_csv = f"Ticket_System_{period_label}.csv"
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="tickets.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="{fname_csv}"'},
         )
 
     # xlsx
@@ -253,8 +264,9 @@ async def export_tickets(
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
+    fname_xlsx = f"Ticket_System_{period_label}.xlsx"
     return StreamingResponse(
         iter([buf.read()]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="tickets.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname_xlsx}"'},
     )

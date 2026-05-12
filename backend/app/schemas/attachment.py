@@ -10,6 +10,7 @@ class AttachmentResponse(BaseModel):
     size_bytes: int
     mimetype: str
     uploaded_by: int | None
+    uploader_name: str | None = None
     url: str
     created_at: datetime
 

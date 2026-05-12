@@ -36,6 +36,12 @@ async def update_me(
     if data.password is not None:
         current_user.password_hash = hash_password(data.password)
 
+    if "phone" in data.model_fields_set:
+        current_user.phone = data.phone
+
+    if "contact_info" in data.model_fields_set:
+        current_user.contact_info = data.contact_info
+
     await db.commit()
     await db.refresh(current_user)
     return UserResponse.model_validate(current_user)
@@ -50,7 +56,7 @@ async def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
 ):
     query = select(User)
 
@@ -111,6 +117,7 @@ async def create_user(
         role=data.role,
         department_id=data.department_id,
         is_active=True,
+        is_email_verified=True,  # admin-created users are pre-verified
     )
     db.add(user)
     await db.commit()

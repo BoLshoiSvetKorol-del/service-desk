@@ -10,10 +10,26 @@ class UserResponse(BaseModel):
     full_name: str
     role: UserRole
     department_id: int | None = None
+    phone: str | None = None
+    contact_info: str | None = None
     is_active: bool
+    is_email_verified: bool = True
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Пароль должен содержать не менее 6 символов")
+        return v
 
 
 class UserCreate(BaseModel):
@@ -58,6 +74,8 @@ class UserMeUpdate(BaseModel):
     email: EmailStr | None = None
     full_name: str | None = None
     password: str | None = None
+    phone: str | None = None
+    contact_info: str | None = None
 
     @field_validator("password")
     @classmethod

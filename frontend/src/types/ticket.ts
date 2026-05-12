@@ -1,4 +1,4 @@
-export type TicketStatus = 'new' | 'in_progress' | 'waiting_info' | 'resolved' | 'cancelled'
+export type TicketStatus = 'new' | 'in_progress' | 'waiting_info' | 'resolved' | 'cancelled' | 'merged'
 export type PriorityName = 'low' | 'normal' | 'high' | 'critical'
 
 export interface Priority {
@@ -18,19 +18,28 @@ export interface Attachment {
   mimetype: string
   uploaded_by: number
   uploader_name: string | null
+  url: string
   created_at: string
 }
 
 export interface Comment {
   id: number
   ticket_id: number
-  author_id: number
+  author_id: number | null
   author_name: string | null
+  author_role: string | null
   body: string
   is_internal: boolean
   created_at: string
   updated_at: string
   attachments?: Attachment[]
+}
+
+export interface Tag {
+  id: number
+  name: string
+  color_hex: string
+  created_at: string
 }
 
 export interface TicketListItem {
@@ -51,6 +60,7 @@ export interface TicketListItem {
   sla_violated: boolean
   created_at: string
   updated_at: string
+  tags: Tag[]
 }
 
 export interface Ticket extends TicketListItem {
@@ -58,14 +68,15 @@ export interface Ticket extends TicketListItem {
   sla_paused_at: string | null
   sla_extra_minutes: number
   closed_at: string | null
+  merged_into_id: number | null
   attachments?: Attachment[]
 }
 
 export interface TicketCreateRequest {
   title: string
   description: string
-  ticket_type_id?: number | null
-  priority_id: number
+  type_id: number
+  priority_id?: number
   department_id?: number | null
 }
 
@@ -120,9 +131,15 @@ export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   new: ['in_progress', 'cancelled'],
   in_progress: ['waiting_info', 'resolved', 'cancelled'],
   waiting_info: ['in_progress', 'resolved', 'cancelled'],
-  resolved: [],
+  resolved: ['in_progress'],
   cancelled: [],
+  merged: [],
 }
+
+// Переходы, доступные только user/admin (не agent)
+export const STATUS_TRANSITIONS_USER_ONLY: TicketStatus[] = ['in_progress']
+
+export const STATUS_TRANSITIONS_FROM_RESOLVED: TicketStatus[] = ['in_progress']
 
 export const STATUS_LABELS: Record<TicketStatus, string> = {
   new: 'Новая',
@@ -130,6 +147,7 @@ export const STATUS_LABELS: Record<TicketStatus, string> = {
   waiting_info: 'Ожидает информации',
   resolved: 'Выполнена',
   cancelled: 'Отменена',
+  merged: 'Объединена',
 }
 
 export const PRIORITY_LABELS: Record<PriorityName, string> = {

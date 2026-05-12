@@ -6,7 +6,7 @@ export interface ReportParams {
   department_id?: number
   type_id?: number
   priority_id?: number
-  group_by?: 'day' | 'week' | 'month'
+  groupby?: 'day' | 'week' | 'month'
 }
 
 export interface CountDataPoint {
@@ -21,7 +21,7 @@ export interface StatusDataPoint {
 
 export interface AvgResolutionDataPoint {
   priority: string
-  avg_hours: number
+  avg_hours: number | null
 }
 
 export interface SLAComplianceData {
@@ -31,8 +31,8 @@ export interface SLAComplianceData {
 }
 
 export async function getTicketsCount(params?: ReportParams): Promise<CountDataPoint[]> {
-  const res = await client.get<CountDataPoint[]>('/reports/tickets-count', { params })
-  return res.data
+  const res = await client.get<{ items: CountDataPoint[]; total: number }>('/reports/tickets-count', { params })
+  return res.data.items
 }
 
 export async function getTicketsByStatus(params?: ReportParams): Promise<StatusDataPoint[]> {
@@ -56,7 +56,9 @@ export async function exportTickets(format: 'csv' | 'xlsx', params?: ReportParam
     responseType: 'blob',
   })
   const ext = format === 'xlsx' ? 'xlsx' : 'csv'
-  const filename = `tickets_export.${ext}`
+  const disposition: string = res.headers['content-disposition'] ?? ''
+  const match = disposition.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/)
+  const filename = match ? match[1] : `Ticket_System.${ext}`
   const url = URL.createObjectURL(res.data as Blob)
   const a = document.createElement('a')
   a.href = url
