@@ -33,8 +33,14 @@ export default function AppSidebar() {
   return (
     <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light">
       <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 700, fontSize: collapsed ? 14 : 18, color: '#1677ff', padding: '0 16px' }}>
-        {collapsed ? 'SD' : 'Service Desk'}
+                    fontWeight: 700, fontSize: collapsed ? 14 : 16, color: '#1677ff', padding: '0 16px',
+                    flexDirection: 'column', lineHeight: 1.2, gap: 2 }}>
+        {collapsed ? 'ЭТ' : (
+          <>
+            <span style={{ fontSize: 16 }}>Service Desk</span>
+            <span style={{ fontSize: 10, fontWeight: 400, color: '#888' }}>Экспресс Технологии</span>
+          </>
+        )}
       </div>
       <Menu
         mode="inline"

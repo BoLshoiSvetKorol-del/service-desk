@@ -1,5 +1,5 @@
 import { Button, Layout, Space, Typography } from 'antd'
-import { LogoutOutlined, CustomerServiceOutlined, UserOutlined } from '@ant-design/icons'
+import { LogoutOutlined, CustomerServiceOutlined, UserOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../../store/authStore'
 import { logout as apiLogout } from '../../../api/auth'
@@ -45,7 +45,10 @@ export default function PortalLayout() {
           onClick={() => navigate('/portal/tickets')}
         >
           <CustomerServiceOutlined style={{ fontSize: 22, color: '#1677ff' }} />
-          <Typography.Text strong style={{ fontSize: 16 }}>Клиентский портал</Typography.Text>
+          <span>
+            <Typography.Text strong style={{ fontSize: 16 }}>Служба поддержки</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 6 }}>Экспресс Технологии</Typography.Text>
+          </span>
         </Space>
 
         {user && (
@@ -53,6 +56,14 @@ export default function PortalLayout() {
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
               {user.full_name || user.username}
             </Typography.Text>
+            <Button
+              type="text"
+              icon={<QuestionCircleOutlined />}
+              onClick={() => navigate('/portal/faq')}
+              size="small"
+            >
+              FAQ
+            </Button>
             <Button
               type="text"
               icon={<UserOutlined />}

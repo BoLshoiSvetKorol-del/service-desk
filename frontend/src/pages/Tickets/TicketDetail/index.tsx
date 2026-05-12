@@ -385,7 +385,10 @@ export default function TicketDetailPage() {
                     loading={actionLoading}
                     allowClear
                     style={{ width: '100%' }}
-                    options={agents.map(u => ({ value: u.id, label: u.full_name || u.username }))}
+                    options={(ticket.department_id
+                      ? agents.filter(u => u.department_id === ticket.department_id)
+                      : agents
+                    ).map(u => ({ value: u.id, label: u.full_name || u.username }))}
                     placeholder="Не назначен"
                   />
                 ) : (

@@ -1,6 +1,9 @@
+import re
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, field_validator
 from app.models.user import UserRole
+
+_PHONE_RE = re.compile(r"^\+?[\d\s\-\(\)]{7,20}$")
 
 
 class UserResponse(BaseModel):
@@ -82,4 +85,11 @@ class UserMeUpdate(BaseModel):
     def password_min_length(cls, v: str | None) -> str | None:
         if v is not None and len(v) < 6:
             raise ValueError("Пароль должен быть не менее 6 символов")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_format(cls, v: str | None) -> str | None:
+        if v is not None and v.strip() != "" and not _PHONE_RE.match(v.strip()):
+            raise ValueError("Некорректный формат номера телефона")
         return v

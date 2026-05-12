@@ -18,6 +18,7 @@ import PortalTicketsPage from '../pages/Portal/PortalTicketsPage'
 import PortalCreateTicketPage from '../pages/Portal/PortalCreateTicketPage'
 import PortalTicketDetailPage from '../pages/Portal/PortalTicketDetailPage'
 import PortalProfilePage from '../pages/Portal/PortalProfilePage'
+import PortalFaqPage from '../pages/Portal/PortalFaqPage'
 
 /** Redirect unauthenticated users to login */
 function PrivateRoute() {
@@ -110,6 +111,7 @@ export const router = createBrowserRouter([
           { path: '/portal/tickets/new', element: <PortalCreateTicketPage /> },
           { path: '/portal/tickets/:id', element: <PortalTicketDetailPage /> },
           { path: '/portal/profile', element: <PortalProfilePage /> },
+          { path: '/portal/faq', element: <PortalFaqPage /> },
           { path: '/portal', element: <Navigate to="/portal/tickets" replace /> },
         ],
       },

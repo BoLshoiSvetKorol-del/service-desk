@@ -3,6 +3,7 @@ import { notification } from 'antd'
 import { getAccessToken } from '../api/client'
 import { useNotificationStore } from '../store/notificationStore'
 import { useTicketEventStore } from '../store/ticketEventStore'
+import { useAuthStore } from '../store/authStore'
 import type { AppNotification } from '../store/notificationStore'
 
 interface SSEMessage {
@@ -32,6 +33,7 @@ function parseSSEMessages(raw: string): SSEMessage[] {
 export function useSSE() {
   const addNotification = useNotificationStore(s => s.addNotification)
   const publishEvent = useTicketEventStore(s => s.publishEvent)
+  const currentUserId = useAuthStore(s => s.user?.id)
 
   useEffect(() => {
     let aborted = false
@@ -122,7 +124,8 @@ export function useSSE() {
             placement: 'topRight',
           })
           break
-        case 'new_comment':
+        case 'new_comment': {
+          const isOwnAction = data.actor_id === currentUserId
           publishEvent({
             type: 'new_comment',
             ticketId: data.ticket_id as number,
@@ -130,25 +133,32 @@ export function useSSE() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             comment: data.comment as any,
           })
-          notification.info({
-            message: `Новый комментарий — ${data.actor_name ?? ''}`,
-            description: String(data.ticket_number ?? ''),
-            placement: 'topRight',
-          })
+          if (!isOwnAction) {
+            notification.info({
+              message: `Новый комментарий — ${data.actor_name ?? ''}`,
+              description: String(data.ticket_number ?? ''),
+              placement: 'topRight',
+            })
+          }
           break
-        case 'new_attachment':
+        }
+        case 'new_attachment': {
+          const isOwnAction = data.actor_id === currentUserId
           publishEvent({
             type: 'new_attachment',
             ticketId: data.ticket_id as number,
             ticketNumber: String(data.ticket_number ?? ''),
             payload: data,
           })
-          notification.info({
-            message: `Новое вложение — ${data.actor_name ?? ''}`,
-            description: `${data.ticket_number ?? ''}: ${data.filename ?? ''}`,
-            placement: 'topRight',
-          })
+          if (!isOwnAction) {
+            notification.info({
+              message: `Новое вложение — ${data.actor_name ?? ''}`,
+              description: `${data.ticket_number ?? ''}: ${data.filename ?? ''}`,
+              placement: 'topRight',
+            })
+          }
           break
+        }
         case 'sla_warning':
           notification.warning({
             message: 'Предупреждение SLA',
@@ -175,5 +185,5 @@ export function useSSE() {
       abortController.abort()
       if (reconnectTimer) clearTimeout(reconnectTimer)
     }
-  }, [addNotification, publishEvent])
+  }, [addNotification, publishEvent, currentUserId])
 }

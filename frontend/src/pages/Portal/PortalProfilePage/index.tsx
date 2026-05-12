@@ -8,6 +8,8 @@ import { getErrorMessage } from '../../../types/common'
 
 const { TextArea } = Input
 
+const PHONE_RE = /^\+?[\d\s\-()]{7,20}$/
+
 export default function PortalProfilePage() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
@@ -31,7 +33,6 @@ export default function PortalProfilePage() {
     email: string
     phone: string
     contact_info: string
-    password?: string
   }) {
     setLoading(true)
     try {
@@ -40,11 +41,9 @@ export default function PortalProfilePage() {
         email: values.email,
         phone: values.phone || null,
         contact_info: values.contact_info || null,
-        ...(values.password ? { password: values.password } : {}),
       })
       setUser(updated)
       message.success('Профиль обновлён')
-      form.setFieldValue('password', '')
     } catch (e) {
       message.error(getErrorMessage(e))
     } finally {
@@ -83,7 +82,17 @@ export default function PortalProfilePage() {
             Укажите, как с вами можно связаться помимо системы — например, телефон, Telegram, WhatsApp или другой мессенджер.
           </Typography.Paragraph>
 
-          <Form.Item name="phone" label="Телефон">
+          <Form.Item
+            name="phone"
+            label="Телефон"
+            rules={[{
+              validator: (_, v) => {
+                if (!v || v.trim() === '') return Promise.resolve()
+                if (PHONE_RE.test(v.trim())) return Promise.resolve()
+                return Promise.reject(new Error('Некорректный формат номера телефона'))
+              }
+            }]}
+          >
             <Input
               prefix={<PhoneOutlined />}
               size="large"
@@ -96,13 +105,6 @@ export default function PortalProfilePage() {
               rows={3}
               placeholder="Например: Telegram @username, WhatsApp +7 999 123-45-67"
             />
-          </Form.Item>
-
-          <Divider>Смена пароля</Divider>
-
-          <Form.Item name="password" label="Новый пароль (оставьте пустым, если не меняете)"
-            rules={[{ min: 6, message: 'Минимум 6 символов' }]}>
-            <Input.Password size="large" placeholder="Не менее 6 символов" />
           </Form.Item>
 
           <Form.Item style={{ marginTop: 8 }}>

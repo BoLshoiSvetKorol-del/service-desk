@@ -64,7 +64,7 @@ async def notify_ticket_event(
     except KeyError:
         message = f"Событие по заявке {ticket.number}"
 
-    sse_data = {"ticket_id": ticket.id, "ticket_number": ticket.number, "actor_name": actor_name, **extra}
+    sse_data = {"ticket_id": ticket.id, "ticket_number": ticket.number, "actor_name": actor_name, "actor_id": actor.id, **extra}
 
     # Определяем получателей
     recipients: set[int] = set()

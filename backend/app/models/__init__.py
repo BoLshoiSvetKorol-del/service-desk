@@ -10,3 +10,4 @@ from app.models.attachment import Attachment  # noqa: F401
 from app.models.saved_filter import SavedFilter  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.ticket_note import TicketNote  # noqa: F401
+from app.models.routing_rule import RoutingRule  # noqa: F401

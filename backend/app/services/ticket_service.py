@@ -57,7 +57,17 @@ async def create_ticket(db: AsyncSession, data, user: User) -> Ticket:
     if not ticket_type.is_active:
         raise HTTPException(status_code=400, detail="Тип заявки неактивен")
 
-    department_id = data.department_id or ticket_type.default_department_id
+    # Auto-routing: routing rules take priority over manual department / type default
+    from app.services.routing_service import find_matching_rule
+    matched_rule = await find_matching_rule(db, data.title, data.description, data.type_id)
+    if matched_rule:
+        department_id = matched_rule.department_id
+        auto_assignee_id = matched_rule.assignee_id
+        routing_info = {"routing_rule_id": matched_rule.id, "routing_rule_name": matched_rule.name}
+    else:
+        department_id = data.department_id or ticket_type.default_department_id
+        auto_assignee_id = None
+        routing_info = {}
 
     number = await generate_ticket_number(db)
 
@@ -69,10 +79,11 @@ async def create_ticket(db: AsyncSession, data, user: User) -> Ticket:
         title=data.title,
         description=data.description,
         status=TicketStatus.new,
-        priority_id=data.priority_id,
+        priority_id=priority.id,
         type_id=data.type_id,
         requester_id=user.id,
         department_id=department_id,
+        assignee_id=auto_assignee_id,
         sla_deadline=sla_deadline,
         sla_extra_minutes=0,
         sla_violated=False,
@@ -80,11 +91,17 @@ async def create_ticket(db: AsyncSession, data, user: User) -> Ticket:
     db.add(ticket)
     await db.flush()
 
+    history_payload = {
+        "title": ticket.title,
+        "priority_id": ticket.priority_id,
+        "type_id": ticket.type_id,
+        **routing_info,
+    }
     history = TicketHistory(
         ticket_id=ticket.id,
         user_id=user.id,
         event_type="created",
-        payload={"title": ticket.title, "priority_id": ticket.priority_id, "type_id": ticket.type_id},
+        payload=history_payload,
     )
     db.add(history)
     await db.commit()
