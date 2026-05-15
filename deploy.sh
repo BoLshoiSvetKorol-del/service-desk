@@ -2,8 +2,16 @@
 set -e
 
 # ─────────────────────────────────────────────
-#  Service Desk — deploy script for VPS
-#  Run as: bash deploy.sh
+#  Service Desk — первичный деплой на VPS
+#  Запускать ОДИН РАЗ при первоначальной настройке.
+#
+#  Предварительные шаги (выполнить на VPS перед этим скриптом):
+#    apt-get install -y git
+#    git clone https://github.com/BoLshoiSvetKorol-del/service-desk.git /opt/servicedesk
+#    cd /opt/servicedesk
+#    bash deploy.sh
+#
+#  Для обновлений — используй CI/CD (git push) или update.sh
 # ─────────────────────────────────────────────
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -183,9 +191,14 @@ cd "${PROJECT_DIR}"
 docker compose -f docker-compose.prod.yml up -d --build
 
 info "Жду запуска базы данных..."
-sleep 15
+sleep 20
 
-# ─── 8. Готово ────────────────────────────────────────────────────────────────
+# ─── 8. Заполнение демо-данными ───────────────────────────────────────────────
+info "Создаю демо-данные (admin, тестовые заявки)..."
+docker compose -f docker-compose.prod.yml exec -T backend python scripts/seed_demo.py || \
+    warn "seed_demo.py завершился с ошибкой — возможно данные уже есть, это нормально"
+
+# ─── 9. Готово ────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  Система запущена!${NC}"
@@ -200,4 +213,8 @@ echo ""
 echo "  Статус сервисов:"
 docker compose -f docker-compose.prod.yml ps
 echo ""
-echo "  Логи: docker compose -f docker-compose.prod.yml logs -f"
+echo "  Логи:  docker compose -f docker-compose.prod.yml logs -f"
+echo ""
+echo "  Обновление кода (CI/CD): git push origin master"
+echo "  Ручное обновление:       bash /opt/servicedesk/update.sh"
+echo "  Перезапуск:              docker compose -f docker-compose.prod.yml restart"

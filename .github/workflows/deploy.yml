@@ -1,0 +1,53 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sync code to VPS
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/dist' \
+            --exclude='backend/__pycache__' \
+            --exclude='backend/.env' \
+            --exclude='backend/uploads' \
+            --exclude='.env' \
+            --exclude='nginx/frontend' \
+            --exclude='nginx/backend' \
+            --exclude='docs/' \
+            --exclude='*.pyc' \
+            --exclude='*.pyo' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            . root@${{ secrets.VPS_HOST }}:/opt/servicedesk/
+
+      - name: Restart services
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -e
+            cd /opt/servicedesk
+            echo "Rebuilding backend and frontend..."
+            docker compose -f docker-compose.prod.yml up -d --build backend frontend celery_worker celery_beat
+            echo "Cleaning up old images..."
+            docker image prune -f
+            echo ""
+            echo "Deploy completed at $(date)"
+            echo "Service status:"
+            docker compose -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}"
+          ENDSSH
