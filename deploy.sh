@@ -46,43 +46,64 @@ fi
 apt-get install -y -q dnsutils curl openssl 2>/dev/null || true
 
 # ─── 2. Конфигурация ───────────────────────────────────────────────────────────
-info "Настройка конфигурации..."
-echo ""
-echo "Введите данные для системы (нажмите Enter для значения по умолчанию):"
-echo ""
+CONFIG_FILE="${PROJECT_DIR}/deploy-config.env"
 
-read -rp "Email администратора [admin@${DOMAIN1}]: " ADMIN_EMAIL
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${DOMAIN1}}"
-
-read -rp "Полное имя администратора [Администратор]: " ADMIN_FULL_NAME
-ADMIN_FULL_NAME="${ADMIN_FULL_NAME:-Администратор}"
-
-while true; do
-    read -rsp "Пароль администратора (мин. 8 символов): " ADMIN_PASSWORD
+if [ -f "$CONFIG_FILE" ]; then
+    info "Загружаю конфигурацию из deploy-config.env (интерактивный ввод пропущен)."
+    # shellcheck source=/dev/null
+    source "$CONFIG_FILE"
+    : "${ADMIN_EMAIL:=admin@${DOMAIN1}}"
+    : "${ADMIN_FULL_NAME:=Администратор}"
+    : "${SMTP_HOST:=mail.hosting.reg.ru}"
+    : "${SMTP_PORT:=587}"
+    : "${SMTP_USER:=company@extechservice.ru}"
+else
+    info "Файл deploy-config.env не найден — запрашиваю данные вручную."
     echo ""
-    [ ${#ADMIN_PASSWORD} -ge 8 ] && break
-    warn "Пароль слишком короткий, попробуйте снова"
-done
+    echo "Подсказка: создайте ${CONFIG_FILE} по образцу deploy-config.env.example"
+    echo "чтобы не вводить данные повторно."
+    echo ""
 
-echo ""
-echo "Настройка Email для отправки уведомлений:"
-echo "  (уточните SMTP-хост у вашего почтового провайдера)"
-echo "  Пример reg.ru:  mail.hosting.reg.ru  port 465 (SSL) или 587 (TLS)"
-echo ""
-read -rp "SMTP хост [mail.hosting.reg.ru]: " SMTP_HOST
-SMTP_HOST="${SMTP_HOST:-mail.hosting.reg.ru}"
+    read -rp "Email администратора [admin@${DOMAIN1}]: " ADMIN_EMAIL
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${DOMAIN1}}"
 
-read -rp "SMTP порт [587]: " SMTP_PORT
-SMTP_PORT="${SMTP_PORT:-587}"
+    read -rp "Полное имя администратора [Администратор]: " ADMIN_FULL_NAME
+    ADMIN_FULL_NAME="${ADMIN_FULL_NAME:-Администратор}"
 
-read -rp "Email для отправки писем [company@extechservice.ru]: " SMTP_USER
-SMTP_USER="${SMTP_USER:-company@extechservice.ru}"
-read -rsp "Пароль от почты: " SMTP_PASSWORD
-echo ""
+    while true; do
+        read -rsp "Пароль администратора (мин. 8 символов): " ADMIN_PASSWORD
+        echo ""
+        [ ${#ADMIN_PASSWORD} -ge 8 ] && break
+        warn "Пароль слишком короткий, попробуйте снова"
+    done
 
-# ─── 3. Генерация ключей ───────────────────────────────────────────────────────
-SECRET_KEY=$(openssl rand -hex 32)
-DB_PASSWORD=$(openssl rand -hex 16)
+    echo ""
+    echo "Настройка Email для отправки уведомлений:"
+    echo "  (уточните SMTP-хост у вашего почтового провайдера)"
+    echo "  Пример reg.ru:  mail.hosting.reg.ru  port 465 (SSL) или 587 (TLS)"
+    echo ""
+    read -rp "SMTP хост [mail.hosting.reg.ru]: " SMTP_HOST
+    SMTP_HOST="${SMTP_HOST:-mail.hosting.reg.ru}"
+
+    read -rp "SMTP порт [587]: " SMTP_PORT
+    SMTP_PORT="${SMTP_PORT:-587}"
+
+    read -rp "Email для отправки писем [company@extechservice.ru]: " SMTP_USER
+    SMTP_USER="${SMTP_USER:-company@extechservice.ru}"
+    read -rsp "Пароль от почты: " SMTP_PASSWORD
+    echo ""
+fi
+
+# ─── 3. Генерация ключей (или сохранение существующих) ────────────────────────
+EXISTING_ENV="${PROJECT_DIR}/backend/.env"
+if [ -f "$EXISTING_ENV" ] && grep -q "^SECRET_KEY=" "$EXISTING_ENV"; then
+    SECRET_KEY=$(grep "^SECRET_KEY=" "$EXISTING_ENV" | cut -d= -f2-)
+    DB_PASSWORD=$(grep "^DATABASE_URL=" "$EXISTING_ENV" | sed 's/.*servicedesk:\(.*\)@postgres.*/\1/')
+    info "Использую существующие SECRET_KEY и DB_PASSWORD из backend/.env"
+else
+    SECRET_KEY=$(openssl rand -hex 32)
+    DB_PASSWORD=$(openssl rand -hex 16)
+fi
 
 # ─── 4. Создание .env ─────────────────────────────────────────────────────────
 info "Создаю backend/.env..."
@@ -167,6 +188,18 @@ docker volume create certbot_conf 2>/dev/null || true
 get_cert() {
     local domain="$1"
     info "Сертификат для ${domain}..."
+
+    # Проверяем — сертификат уже существует в volume?
+    local existing
+    existing=$(docker run --rm \
+        -v certbot_conf:/etc/letsencrypt \
+        certbot/certbot certificates 2>/dev/null) || true
+
+    if echo "$existing" | grep -q "Domains:.*${domain}"; then
+        info "Сертификат для ${domain} уже существует — пропускаю."
+        return 0
+    fi
+
     docker run --rm \
         -v certbot_conf:/etc/letsencrypt \
         -p 80:80 \
@@ -175,6 +208,8 @@ get_cert() {
         --email "${ADMIN_EMAIL}" \
         --agree-tos \
         --no-eff-email \
+        --keep-until-expiring \
+        -n \
         -d "${domain}" \
         -d "www.${domain}" || {
             warn "Не удалось получить сертификат для ${domain}. Проверьте DNS."
