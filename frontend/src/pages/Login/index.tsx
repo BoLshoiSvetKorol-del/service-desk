@@ -64,7 +64,7 @@ export default function LoginPage() {
         <div style={{ textAlign: 'center' }}>
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
             Клиент?{' '}
-            <Typography.Link href="/portal/login">Войти в клиентский портал</Typography.Link>
+            <Typography.Link href="https://extechportal.ru/portal/login">Войти в клиентский портал</Typography.Link>
           </Typography.Text>
         </div>
       </Card>

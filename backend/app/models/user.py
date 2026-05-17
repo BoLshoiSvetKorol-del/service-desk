@@ -8,6 +8,7 @@ from app.database import Base
 
 class UserRole(str, enum.Enum):
     admin = "admin"
+    department_head = "department_head"
     agent = "agent"
     user = "user"
 

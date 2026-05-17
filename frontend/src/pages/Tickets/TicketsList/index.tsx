@@ -99,6 +99,7 @@ export default function TicketsListPage() {
         columns={columns}
         rowKey="id"
         loading={loading}
+        scroll={{ x: 800 }}
         pagination={{
           current: filters.page ?? 1,
           pageSize: filters.page_size ?? 20,

@@ -22,7 +22,7 @@ from app.utils.permissions import require_role
 
 router = APIRouter()
 
-_ALLOWED_ROLES = (UserRole.admin, UserRole.agent)
+_ALLOWED_ROLES = (UserRole.admin, UserRole.department_head, UserRole.agent)
 
 
 def _base_filters(

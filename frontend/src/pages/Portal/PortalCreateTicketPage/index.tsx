@@ -45,7 +45,7 @@ export default function PortalCreateTicketPage() {
         }
       }
 
-      message.success(`Заявка ${ticket.number} создана`)
+      message.success(`Инцидент ${ticket.number} зарегистрирован`)
       navigate(`/portal/tickets/${ticket.id}`)
     } catch (e) {
       message.error(getErrorMessage(e))
@@ -62,10 +62,10 @@ export default function PortalCreateTicketPage() {
         style={{ paddingLeft: 0, marginBottom: 16 }}
         onClick={() => navigate('/portal/tickets')}
       >
-        К списку заявок
+        К списку инцидентов
       </Button>
 
-      <Typography.Title level={4} style={{ marginBottom: 20 }}>Новая заявка</Typography.Title>
+      <Typography.Title level={4} style={{ marginBottom: 20 }}>Новый инцидент</Typography.Title>
 
       <Card>
         <Form form={form} layout="vertical" onFinish={handleFinish} style={{ maxWidth: 620 }}>
@@ -109,7 +109,7 @@ export default function PortalCreateTicketPage() {
           <Form.Item style={{ marginTop: 8 }}>
             <Space>
               <Button type="primary" htmlType="submit" size="large" loading={loading}>
-                Отправить заявку
+                Отправить инцидент
               </Button>
               <Button size="large" onClick={() => navigate('/portal/tickets')}>
                 Отмена

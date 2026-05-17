@@ -28,6 +28,13 @@ class StatusChangeRequest(BaseModel):
     status: TicketStatus
     comment: str | None = None
 
+    @model_validator(mode="after")
+    def _require_comment_for_cancel(self):
+        if self.status == TicketStatus.cancelled and not (self.comment and self.comment.strip()):
+            from pydantic import ValidationError  # noqa
+            raise ValueError("При отмене инцидента необходимо указать причину (поле comment)")
+        return self
+
 
 class AssignRequest(BaseModel):
     assignee_id: int | None = None

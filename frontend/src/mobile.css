@@ -1,0 +1,54 @@
+/* Mobile responsive overrides */
+
+@media (max-width: 767px) {
+  /* Ant Design table: allow horizontal scroll */
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+
+  /* Tighten card padding on mobile */
+  .ant-card-body {
+    padding: 12px !important;
+  }
+
+  /* Descriptions: stack label/value vertically */
+  .ant-descriptions-item-label,
+  .ant-descriptions-item-content {
+    display: block;
+  }
+
+  /* Tabs scrollable on mobile */
+  .ant-tabs-nav-wrap {
+    overflow-x: auto;
+  }
+
+  /* Form items full-width */
+  .ant-form-item-control-input {
+    width: 100%;
+  }
+
+  /* Portal header: wrap if needed */
+  .ant-layout-header {
+    height: auto !important;
+    line-height: normal !important;
+    padding: 8px 12px !important;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* TicketDetail sidebar: full width below main on mobile */
+  .ticket-detail-sidebar {
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Extra-small: reduce typography */
+  h1.ant-typography, .ant-typography h1 { font-size: 20px !important; }
+  h2.ant-typography, .ant-typography h2 { font-size: 18px !important; }
+  h3.ant-typography, .ant-typography h3 { font-size: 16px !important; }
+  h4.ant-typography, .ant-typography h4 { font-size: 14px !important; }
+
+  /* Statistics on dashboard: smaller text */
+  .ant-statistic-content-value { font-size: 20px !important; }
+}

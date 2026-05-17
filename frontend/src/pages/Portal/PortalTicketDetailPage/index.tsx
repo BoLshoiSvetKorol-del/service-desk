@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Alert, Avatar, Button, Card, Col, Descriptions, Form, Input,
-  List, Row, Skeleton, Space, Tag, Typography, message,
+  List, Modal, Row, Skeleton, Space, Tag, Typography, message,
 } from 'antd'
 import {
   ArrowLeftOutlined, SendOutlined, UserOutlined,
@@ -12,7 +12,6 @@ import { getTicket, changeTicketStatus, getTicketAttachments } from '../../../ap
 import { getComments, createComment } from '../../../api/comments'
 import type { Ticket, Comment, Attachment } from '../../../types/ticket'
 import { STATUS_LABELS, PRIORITY_LABELS } from '../../../types/ticket'
-import SLACountdown from '../../../components/common/SLACountdown'
 import AttachmentList from '../../../components/tickets/AttachmentList'
 import { useAuthStore } from '../../../store/authStore'
 import { useTicketEventStore } from '../../../store/ticketEventStore'
@@ -43,6 +42,8 @@ export default function PortalTicketDetailPage() {
   const [commentBody, setCommentBody] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [cancelModal, setCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -53,11 +54,11 @@ export default function PortalTicketDetailPage() {
       getTicketAttachments(Number(id)),
     ])
       .then(([t, cs, atts]) => { setTicket(t); setComments(cs); setAttachments(atts) })
-      .catch(() => message.error('Ошибка загрузки заявки'))
+      .catch(() => message.error('Ошибка загрузки инцидента'))
       .finally(() => setLoading(false))
   }, [id])
 
-  // Real-time: SSE new_comment
+  // Real-time: SSE new_comment / attachment / status
   useEffect(() => {
     if (!lastTicketEvent || !ticket) return
     if (lastTicketEvent.ticketId !== ticket.id) return
@@ -86,13 +87,15 @@ export default function PortalTicketDetailPage() {
     }
   }
 
-  async function handleCancel() {
-    if (!ticket) return
+  async function handleCancelConfirm() {
+    if (!ticket || !cancelReason.trim()) return
     setCancelling(true)
     try {
-      const updated = await changeTicketStatus(ticket.id, { status: 'cancelled' })
+      const updated = await changeTicketStatus(ticket.id, { status: 'cancelled', comment: cancelReason.trim() })
       setTicket(updated)
-      message.success('Заявка отменена')
+      message.success('Инцидент отменён')
+      setCancelModal(false)
+      setCancelReason('')
     } catch (e) {
       message.error(getErrorMessage(e))
     } finally {
@@ -101,17 +104,38 @@ export default function PortalTicketDetailPage() {
   }
 
   if (loading) return <Skeleton active paragraph={{ rows: 10 }} />
-  if (!ticket) return <Typography.Text type="danger">Заявка не найдена</Typography.Text>
+  if (!ticket) return <Typography.Text type="danger">Инцидент не найден</Typography.Text>
 
   return (
     <div>
+      <Modal
+        open={cancelModal}
+        title="Причина отмены"
+        onOk={handleCancelConfirm}
+        onCancel={() => { setCancelModal(false); setCancelReason('') }}
+        okText="Отменить инцидент"
+        okButtonProps={{ danger: true, disabled: !cancelReason.trim(), loading: cancelling }}
+        cancelText="Назад"
+      >
+        <Form layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item label="Укажите причину отмены" required help="Обязательное поле">
+            <Input.TextArea
+              rows={4}
+              placeholder="Опишите причину отмены..."
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              autoFocus
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
       <Button
         icon={<ArrowLeftOutlined />}
         type="link"
         style={{ paddingLeft: 0, marginBottom: 12 }}
         onClick={() => navigate('/portal/tickets')}
       >
-        К списку заявок
+        К списку инцидентов
       </Button>
 
       {ticket.status === 'merged' && ticket.merged_into_id && (
@@ -121,10 +145,10 @@ export default function PortalTicketDetailPage() {
           style={{ marginBottom: 12 }}
           message={
             <span>
-              Эта заявка объединена.{' '}
+              Этот инцидент объединён.{' '}
               <Button type="link" style={{ padding: 0 }}
                 onClick={() => navigate(`/portal/tickets/${ticket.merged_into_id}`)}>
-                Открыть основную заявку
+                Открыть основной инцидент
               </Button>
             </span>
           }
@@ -141,16 +165,9 @@ export default function PortalTicketDetailPage() {
             </Space>
           </Col>
           <Col>
-            <Space>
-              <SLACountdown
-                slaDeadline={ticket.sla_deadline}
-                slaViolated={ticket.sla_violated}
-                createdAt={ticket.created_at}
-              />
-              <Tag color={STATUS_COLOR[ticket.status] ?? 'default'} style={{ fontSize: 14, padding: '4px 10px' }}>
-                {STATUS_LABELS[ticket.status] ?? ticket.status}
-              </Tag>
-            </Space>
+            <Tag color={STATUS_COLOR[ticket.status] ?? 'default'} style={{ fontSize: 14, padding: '4px 10px' }}>
+              {STATUS_LABELS[ticket.status] ?? ticket.status}
+            </Tag>
           </Col>
         </Row>
       </Card>
@@ -232,7 +249,7 @@ export default function PortalTicketDetailPage() {
               }}
             />
 
-            {/* Input area */}
+            {/* Input area — only for active tickets */}
             {!['resolved', 'cancelled', 'merged'].includes(ticket.status) && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid #f0f0f0' }}>
                 <Form.Item style={{ marginBottom: 8 }}>
@@ -268,7 +285,7 @@ export default function PortalTicketDetailPage() {
 
             {ticket.status === 'resolved' && (
               <div style={{ padding: '12px 16px', textAlign: 'center', color: '#52c41a', borderTop: '1px solid #f0f0f0' }}>
-                <CheckCircleOutlined /> Заявка выполнена
+                <CheckCircleOutlined /> Инцидент выполнен
               </div>
             )}
           </Card>
@@ -280,11 +297,8 @@ export default function PortalTicketDetailPage() {
               <Descriptions.Item label="Статус">
                 <Tag color={STATUS_COLOR[ticket.status]}>{STATUS_LABELS[ticket.status]}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Приоритет">
-                {PRIORITY_LABELS[ticket.priority.name] ?? ticket.priority.name}
-              </Descriptions.Item>
               {ticket.ticket_type_name && (
-                <Descriptions.Item label="Тип">{ticket.ticket_type_name}</Descriptions.Item>
+                <Descriptions.Item label="Тема">{ticket.ticket_type_name}</Descriptions.Item>
               )}
               {ticket.department_name && (
                 <Descriptions.Item label="Отдел">{ticket.department_name}</Descriptions.Item>
@@ -293,9 +307,6 @@ export default function PortalTicketDetailPage() {
                 <Descriptions.Item label="Исполнитель">{ticket.assignee_name}</Descriptions.Item>
               )}
               <Descriptions.Item label="Создана">{formatDate(ticket.created_at)}</Descriptions.Item>
-              {ticket.sla_deadline && (
-                <Descriptions.Item label="SLA дедлайн">{formatDate(ticket.sla_deadline)}</Descriptions.Item>
-              )}
               {ticket.closed_at && (
                 <Descriptions.Item label="Закрыта">{formatDate(ticket.closed_at)}</Descriptions.Item>
               )}
@@ -308,9 +319,9 @@ export default function PortalTicketDetailPage() {
                 loading={cancelling}
                 style={{ marginTop: 16 }}
                 icon={<ClockCircleOutlined />}
-                onClick={handleCancel}
+                onClick={() => setCancelModal(true)}
               >
-                Отменить заявку
+                Отменить инцидент
               </Button>
             )}
           </Card>

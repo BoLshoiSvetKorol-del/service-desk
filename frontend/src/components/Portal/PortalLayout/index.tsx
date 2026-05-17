@@ -1,5 +1,5 @@
 import { Button, Layout, Space, Typography } from 'antd'
-import { LogoutOutlined, CustomerServiceOutlined, UserOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { LogoutOutlined, CustomerServiceOutlined, UserOutlined, QuestionCircleOutlined, PhoneOutlined } from '@ant-design/icons'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../../store/authStore'
 import { logout as apiLogout } from '../../../api/auth'
@@ -53,6 +53,10 @@ export default function PortalLayout() {
 
         {user && (
           <Space>
+            <Space size={4}>
+              <PhoneOutlined style={{ color: '#1677ff' }} />
+              <Typography.Text style={{ fontSize: 13, fontWeight: 500 }}>+7 (800) 000-00-00</Typography.Text>
+            </Space>
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
               {user.full_name || user.username}
             </Typography.Text>
@@ -84,7 +88,7 @@ export default function PortalLayout() {
         )}
       </Header>
 
-      <Content style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '24px 16px' }}>
+      <Content style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: 'clamp(12px, 3vw, 24px) clamp(8px, 4vw, 16px)' }}>
         <Outlet />
       </Content>
     </Layout>

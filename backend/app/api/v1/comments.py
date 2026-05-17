@@ -1,4 +1,3 @@
-from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,8 +14,6 @@ from app.redis import get_redis
 from app.utils.permissions import get_current_user, require_role
 
 router = APIRouter()
-
-EDIT_WINDOW = timedelta(minutes=5)
 
 
 async def _get_ticket_or_404(db: AsyncSession, ticket_id: int) -> Ticket:
@@ -68,6 +65,15 @@ async def create_comment(
 
     if data.is_internal and current_user.role == UserRole.user:
         raise HTTPException(status_code=403, detail="Пользователи не могут создавать внутренние комментарии")
+
+    # Write access: assignee, department_head of ticket's dept, admin, or requester (portal)
+    # Agents/dept_head from same dept who are NOT the assignee can only read
+    if current_user.role == UserRole.agent:
+        is_assignee = ticket.assignee_id == current_user.id
+        is_requester = ticket.requester_id == current_user.id
+        if not is_assignee and not is_requester:
+            raise HTTPException(status_code=403,
+                                detail="Только исполнитель заявки может писать комментарии")
 
     comment = Comment(
         ticket_id=ticket_id,
@@ -121,14 +127,10 @@ async def update_comment(
     _check_ticket_access(ticket, current_user)
     comment = await _get_comment_or_404(db, ticket_id, comment_id)
 
-    if comment.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Можно редактировать только свои комментарии")
-
-    created = comment.created_at
-    if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) - created > EDIT_WINDOW:
-        raise HTTPException(status_code=403, detail="Окно редактирования истекло (5 минут)")
+    # Only admin and department_head can edit comments
+    can_edit = current_user.role in (UserRole.admin, UserRole.department_head)
+    if not can_edit:
+        raise HTTPException(status_code=403, detail="Редактировать комментарии может только руководитель отдела")
 
     comment.body = data.body
     await db.commit()
@@ -147,19 +149,8 @@ async def delete_comment(
     _check_ticket_access(ticket, current_user)
     comment = await _get_comment_or_404(db, ticket_id, comment_id)
 
-    is_author_in_window = (
-        comment.author_id == current_user.id
-        and _within_edit_window(comment.created_at)
-    )
-    if current_user.role != UserRole.admin and not is_author_in_window:
-        raise HTTPException(status_code=403, detail="Нет прав на удаление комментария")
+    if current_user.role not in (UserRole.admin, UserRole.department_head):
+        raise HTTPException(status_code=403, detail="Удалять комментарии может только руководитель отдела")
 
     await db.delete(comment)
     await db.commit()
-
-
-def _within_edit_window(created_at: datetime) -> bool:
-    ts = created_at
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - ts <= EDIT_WINDOW

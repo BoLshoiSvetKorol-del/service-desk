@@ -4,8 +4,7 @@ import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { getTickets } from '../../../api/tickets'
 import type { TicketListItem } from '../../../types/ticket'
-import { STATUS_LABELS, PRIORITY_LABELS } from '../../../types/ticket'
-import SLACountdown from '../../../components/common/SLACountdown'
+import { STATUS_LABELS } from '../../../types/ticket'
 
 const STATUS_COLOR: Record<string, string> = {
   new: 'blue', in_progress: 'cyan', waiting_info: 'gold',
@@ -30,7 +29,7 @@ export default function PortalTicketsPage() {
       status: statusFilter,
     })
       .then(res => { setTickets(res.items); setTotal(res.total) })
-      .catch(() => message.error('Ошибка загрузки заявок'))
+      .catch(() => message.error('Ошибка загрузки инцидентов'))
       .finally(() => setLoading(false))
   }, [page, search, statusFilter])
 
@@ -46,7 +45,7 @@ export default function PortalTicketsPage() {
       width: 130,
     },
     {
-      title: 'Тема',
+      title: 'Тема обращения',
       dataIndex: 'title',
       render: (title: string, row: TicketListItem) => (
         <Button type="link" style={{ padding: 0, textAlign: 'left', height: 'auto', whiteSpace: 'normal' }}
@@ -58,22 +57,9 @@ export default function PortalTicketsPage() {
     {
       title: 'Статус',
       dataIndex: 'status',
-      width: 150,
+      width: 170,
       render: (s: string) => (
         <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABELS[s as keyof typeof STATUS_LABELS] ?? s}</Tag>
-      ),
-    },
-    {
-      title: 'Приоритет',
-      dataIndex: ['priority', 'name'],
-      width: 120,
-      render: (name: string) => PRIORITY_LABELS[name as keyof typeof PRIORITY_LABELS] ?? name,
-    },
-    {
-      title: 'SLA',
-      width: 130,
-      render: (_: unknown, row: TicketListItem) => (
-        <SLACountdown slaDeadline={row.sla_deadline} slaViolated={row.sla_violated} createdAt={row.created_at} />
       ),
     },
     {
@@ -88,11 +74,11 @@ export default function PortalTicketsPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          Мои заявки
+          Мои инциденты
           {total > 0 && <Badge count={total} style={{ marginLeft: 8, backgroundColor: '#1677ff' }} />}
         </Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/portal/tickets/new')}>
-          Новая заявка
+          Новый инцидент
         </Button>
       </div>
 
@@ -137,7 +123,7 @@ export default function PortalTicketsPage() {
             showTotal: t => `Всего ${t}`,
             showSizeChanger: false,
           }}
-          locale={{ emptyText: 'Заявок пока нет' }}
+          locale={{ emptyText: 'Инцидентов пока нет' }}
         />
       </Card>
     </div>

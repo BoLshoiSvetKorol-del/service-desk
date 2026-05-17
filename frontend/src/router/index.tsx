@@ -33,6 +33,9 @@ function PrivateRoute() {
     return <Navigate to="/portal/tickets" replace />
   }
 
+  // department_head has same portal restriction as agent — stays in main app
+
+
   return <Outlet />
 }
 
@@ -84,7 +87,7 @@ export const router = createBrowserRouter([
           { path: '/tickets/new', element: <CreateTicketPage /> },
           { path: '/tickets/:id', element: <TicketDetailPage /> },
           {
-            element: <RoleRoute roles={['admin', 'agent']} />,
+            element: <RoleRoute roles={['admin', 'department_head', 'agent']} />,
             children: [
               { path: '/reports', element: <ReportsPage /> },
             ],

@@ -33,6 +33,24 @@ async def _publish_sse(channel: str, event_type: str, data: dict) -> None:
         logger.warning("SSE publish failed: %s", exc)
 
 
+async def _find_dept_head(db, department_id: int):
+    """Найти руководителя отдела (role=department_head), при отсутствии — admin."""
+    from sqlalchemy import select, and_
+    from app.models.user import User, UserRole
+    result = await db.execute(
+        select(User).where(
+            and_(User.department_id == department_id, User.role == UserRole.department_head, User.is_active.is_(True))
+        ).limit(1)
+    )
+    head = result.scalar_one_or_none()
+    if not head:
+        result = await db.execute(
+            select(User).where(and_(User.role == UserRole.admin, User.is_active.is_(True))).limit(1)
+        )
+        head = result.scalar_one_or_none()
+    return head
+
+
 async def _do_check_sla_warnings() -> None:
     from sqlalchemy import select, and_
     from app.models.ticket import Ticket, TicketStatus
@@ -58,6 +76,12 @@ async def _do_check_sla_warnings() -> None:
     for ticket in tickets:
         logger.info("SLA warning: ticket %s deadline %s", ticket.number, ticket.sla_deadline)
 
+        ctx = {
+            "ticket_number": ticket.number,
+            "ticket_title": ticket.title,
+            "sla_deadline": ticket.sla_deadline.strftime("%d.%m.%Y %H:%M"),
+        }
+
         # Email исполнителю
         if ticket.assignee_id:
             async with await _get_session() as db:
@@ -67,12 +91,19 @@ async def _do_check_sla_warnings() -> None:
                 send_email_task.delay(
                     to=assignee.email,
                     template="sla_warning.html",
-                    context={
-                        "ticket_number": ticket.number,
-                        "ticket_title": ticket.title,
-                        "sla_deadline": ticket.sla_deadline.strftime("%d.%m.%Y %H:%M"),
-                        "assignee_name": assignee.full_name,
-                    },
+                    context={**ctx, "recipient_name": assignee.full_name},
+                    subject=f"[SLA] Предупреждение по заявке {ticket.number}",
+                )
+
+        # Email руководителю отдела
+        if ticket.department_id:
+            async with await _get_session() as db:
+                head = await _find_dept_head(db, ticket.department_id)
+            if head and head.email and (not ticket.assignee_id or head.id != ticket.assignee_id):
+                send_email_task.delay(
+                    to=head.email,
+                    template="sla_warning.html",
+                    context={**ctx, "recipient_name": head.full_name},
                     subject=f"[SLA] Предупреждение по заявке {ticket.number}",
                 )
 
@@ -130,7 +161,6 @@ async def _do_check_sla_violations() -> None:
 async def _do_escalate_overdue() -> None:
     from sqlalchemy import select, and_
     from app.models.ticket import Ticket, TicketStatus
-    from app.models.user import User, UserRole
     from app.tasks.email_tasks import send_email_task
 
     now = datetime.now(timezone.utc)
@@ -153,32 +183,30 @@ async def _do_escalate_overdue() -> None:
             continue
 
         async with await _get_session() as db:
-            # Руководитель отдела — первый admin или agent отдела
-            result = await db.execute(
-                select(User).where(
-                    and_(
-                        User.department_id == ticket.department_id,
-                        User.role == UserRole.agent,
-                        User.is_active.is_(True),
-                    )
-                ).limit(1)
-            )
-            lead = result.scalar_one_or_none()
+            lead = await _find_dept_head(db, ticket.department_id)
 
         if lead and lead.email:
             send_email_task.delay(
                 to=lead.email,
                 template="sla_violated.html",
                 context={
+                    "recipient_name": lead.full_name,
                     "ticket_number": ticket.number,
                     "ticket_title": ticket.title,
                     "sla_deadline": ticket.sla_deadline.strftime("%d.%m.%Y %H:%M"),
                     "overdue_hours": round((now - ticket.sla_deadline).total_seconds() / 3600, 1),
-                    "lead_name": lead.full_name,
                 },
                 subject=f"[ЭСКАЛАЦИЯ] Заявка {ticket.number} просрочена",
             )
             logger.info("Escalation sent for ticket %s to %s", ticket.number, lead.email)
+
+        # SSE руководителю отдела
+        if ticket.department_id:
+            await _publish_sse(
+                f"sse:department:{ticket.department_id}",
+                "sla_violated",
+                {"ticket_id": ticket.id, "ticket_number": ticket.number},
+            )
 
 
 @celery.task(name="app.tasks.sla_tasks.check_sla_warnings")

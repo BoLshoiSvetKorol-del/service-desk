@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Card, Col, Row, Statistic, Table, Typography } from 'antd'
 import {
   FileTextOutlined, ClockCircleOutlined,
@@ -6,6 +6,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import type { ColumnsType } from 'antd/es/table'
+import client from '../../api/client'
 import { getTickets } from '../../api/tickets'
 import type { TicketListItem, TicketStatus, PriorityName } from '../../types/ticket'
 import { useAuthStore } from '../../store/authStore'
@@ -18,6 +19,34 @@ interface Stats {
   newCount: number
   overdue: number
   waiting: number
+}
+
+interface DashboardCache {
+  stats: Stats
+  recentTickets: TicketListItem[]
+  violations: TicketListItem[]
+  ts: number
+}
+
+const CACHE_TTL_MS = 30_000
+const CACHE_KEY = 'dashboard_cache'
+
+function readCache(): DashboardCache | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const data: DashboardCache = JSON.parse(raw)
+    if (Date.now() - data.ts > CACHE_TTL_MS) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function writeCache(data: Omit<DashboardCache, 'ts'>) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, ts: Date.now() }))
+  } catch {}
 }
 
 const recentColumns: ColumnsType<TicketListItem> = [
@@ -64,32 +93,43 @@ const recentColumns: ColumnsType<TicketListItem> = [
 export default function DashboardPage() {
   const user = useAuthStore(s => s.user)
   const navigate = useNavigate()
-  const canEdit = user?.role === 'admin' || user?.role === 'agent'
+  const canEdit = user?.role === 'admin' || user?.role === 'agent' || user?.role === 'department_head'
 
   const [stats, setStats] = useState<Stats>({ total: 0, newCount: 0, overdue: 0, waiting: 0 })
   const [recentTickets, setRecentTickets] = useState<TicketListItem[]>([])
   const [violations, setViolations] = useState<TicketListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
+    const cached = readCache()
+    if (cached) {
+      setStats(cached.stats)
+      setRecentTickets(cached.recentTickets)
+      setViolations(cached.violations)
+      setLoading(false)
+      loadedRef.current = true
+      return
+    }
+
     setLoading(true)
     Promise.all([
-      getTickets({ page_size: 1 }),
-      getTickets({ status: 'new', page_size: 1 }),
-      getTickets({ sla_violated: true, page_size: 1 }),
-      getTickets({ status: 'waiting_info', page_size: 1 }),
+      client.get<{ total: number; new_count: number; overdue: number; waiting: number }>('/dashboard/stats'),
       getTickets({ page_size: 5 }),
       canEdit ? getTickets({ sla_violated: true, page_size: 5 }) : Promise.resolve(null),
     ])
-      .then(([total, newT, overdueT, waitingT, recent, violRes]) => {
-        setStats({
-          total: total.total,
-          newCount: newT.total,
-          overdue: overdueT.total,
-          waiting: waitingT.total,
-        })
+      .then(([statsRes, recent, violRes]) => {
+        const s: Stats = {
+          total: statsRes.data.total,
+          newCount: statsRes.data.new_count,
+          overdue: statsRes.data.overdue,
+          waiting: statsRes.data.waiting,
+        }
+        const viols = violRes ? violRes.items : []
+        setStats(s)
         setRecentTickets(recent.items)
-        if (violRes) setViolations(violRes.items)
+        setViolations(viols)
+        writeCache({ stats: s, recentTickets: recent.items, violations: viols })
       })
       .catch(() => {})
       .finally(() => setLoading(false))

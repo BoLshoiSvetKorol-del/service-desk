@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func
+from sqlalchemy.orm import joinedload, selectinload
 from fastapi import HTTPException, status
 
 from app.models.ticket import Ticket, TicketStatus
@@ -11,15 +12,17 @@ from app.models.ticket_type import TicketType
 from app.models.department import Department
 from app.utils.ticket_number import generate_ticket_number
 
+_STAFF = {UserRole.agent, UserRole.department_head, UserRole.admin}
+
 # Матрица допустимых переходов: (from, to) → set of allowed roles
 ALLOWED_TRANSITIONS: dict[tuple[TicketStatus, TicketStatus], set[UserRole]] = {
-    (TicketStatus.new, TicketStatus.in_progress): {UserRole.agent, UserRole.admin},
-    (TicketStatus.new, TicketStatus.cancelled): {UserRole.admin, UserRole.user, UserRole.agent},
-    (TicketStatus.in_progress, TicketStatus.waiting_info): {UserRole.agent, UserRole.admin},
-    (TicketStatus.in_progress, TicketStatus.resolved): {UserRole.agent, UserRole.admin},
-    (TicketStatus.in_progress, TicketStatus.cancelled): {UserRole.agent, UserRole.admin},
-    (TicketStatus.waiting_info, TicketStatus.in_progress): {UserRole.user, UserRole.agent, UserRole.admin},
-    (TicketStatus.waiting_info, TicketStatus.cancelled): {UserRole.agent, UserRole.admin},
+    (TicketStatus.new, TicketStatus.in_progress): _STAFF,
+    (TicketStatus.new, TicketStatus.cancelled): {UserRole.admin, UserRole.user, *_STAFF},
+    (TicketStatus.in_progress, TicketStatus.waiting_info): _STAFF,
+    (TicketStatus.in_progress, TicketStatus.resolved): _STAFF,
+    (TicketStatus.in_progress, TicketStatus.cancelled): _STAFF,
+    (TicketStatus.waiting_info, TicketStatus.in_progress): {UserRole.user, *_STAFF},
+    (TicketStatus.waiting_info, TicketStatus.cancelled): _STAFF,
     (TicketStatus.resolved, TicketStatus.in_progress): {UserRole.user, UserRole.admin},
 }
 
@@ -29,7 +32,7 @@ TERMINAL_STATUSES = {TicketStatus.resolved, TicketStatus.cancelled}
 def _check_ticket_access(ticket: Ticket, user: User) -> None:
     if user.role == UserRole.admin:
         return
-    if user.role == UserRole.agent:
+    if user.role in (UserRole.agent, UserRole.department_head):
         if (ticket.department_id == user.department_id
                 or ticket.assignee_id == user.id
                 or ticket.requester_id == user.id):
@@ -149,6 +152,12 @@ async def change_status(
         if ticket.requester_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к заявке")
 
+    # Сотрудник/руководитель меняет статус без исполнителя → автоназначение на себя
+    if (user.role in (UserRole.agent, UserRole.department_head)
+            and ticket.assignee_id is None
+            and new_status in (TicketStatus.in_progress, TicketStatus.cancelled)):
+        ticket.assignee_id = user.id
+
     # Requester может переоткрыть только если прошло ≤ 72 часов
     if user.role == UserRole.user and new_status == TicketStatus.in_progress and old_status == TicketStatus.resolved:
         from app.services.sla_service import REOPEN_WINDOW_HOURS
@@ -181,26 +190,50 @@ async def change_status(
     await db.commit()
     await db.refresh(ticket)
 
-    # Email заявителю об изменении статуса
+    # Email заявителю + руководителю отдела об изменении статуса
     try:
         from app.tasks.email_tasks import send_email_task
         from app.models.user import User as _User
+        from sqlalchemy import select as _select, and_ as _and_
+        from app.models.user import UserRole as _UserRole
+
+        email_ctx = {
+            "ticket_number": ticket.number,
+            "ticket_title": ticket.title,
+            "old_status": old_status.value,
+            "new_status": new_status.value,
+            "actor_name": user.full_name,
+            "comment": comment,
+        }
+
         requester = await db.get(_User, ticket.requester_id)
         if requester:
             send_email_task.delay(
                 to=requester.email,
                 template="ticket_status_changed.html",
-                context={
-                    "recipient_name": requester.full_name,
-                    "ticket_number": ticket.number,
-                    "ticket_title": ticket.title,
-                    "old_status": old_status.value,
-                    "new_status": new_status.value,
-                    "actor_name": user.full_name,
-                    "comment": comment,
-                },
-                subject=f"Заявка {ticket.number}: статус изменён",
+                context={"recipient_name": requester.full_name, **email_ctx},
+                subject=f"Инцидент {ticket.number}: статус изменён",
             )
+
+        # Руководитель отдела (если не является автором или исполнителем)
+        if ticket.department_id:
+            head_result = await db.execute(
+                _select(_User).where(
+                    _and_(
+                        _User.department_id == ticket.department_id,
+                        _User.role == _UserRole.department_head,
+                        _User.is_active.is_(True),
+                    )
+                ).limit(1)
+            )
+            head = head_result.scalar_one_or_none()
+            if head and head.id not in (ticket.requester_id, user.id):
+                send_email_task.delay(
+                    to=head.email,
+                    template="ticket_status_changed.html",
+                    context={"recipient_name": head.full_name, **email_ctx},
+                    subject=f"Инцидент {ticket.number}: статус изменён",
+                )
     except Exception:
         pass
 
@@ -210,6 +243,14 @@ async def change_status(
 async def assign_ticket(
     db: AsyncSession, ticket: Ticket, user: User, assignee_id: int | None, department_id: int | None
 ) -> Ticket:
+    # Only admin or department_head of the ticket's department may assign
+    if user.role not in (UserRole.admin, UserRole.department_head):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Назначать исполнителя может только руководитель отдела или администратор")
+    if user.role == UserRole.department_head and ticket.department_id != user.department_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Руководитель может назначать только в своём отделе")
+
     old_assignee = ticket.assignee_id
     old_dept = ticket.department_id
     new_assignee_name: str | None = None
@@ -221,6 +262,9 @@ async def assign_ticket(
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         if assignee.role == UserRole.user:
             raise HTTPException(status_code=400, detail="Нельзя назначить роль 'user' исполнителем")
+        # department_head can only assign people from their own department
+        if user.role == UserRole.department_head and assignee.department_id != user.department_id:
+            raise HTTPException(status_code=400, detail="Можно назначать только сотрудников своего отдела")
         ticket.assignee_id = assignee_id
         new_assignee_name = assignee.full_name or assignee.username
     else:
@@ -317,7 +361,7 @@ async def get_tickets(db: AsyncSession, user: User, filters: dict) -> tuple[list
     # Фильтр по роли
     if user.role == UserRole.user:
         query = query.where(Ticket.requester_id == user.id)
-    elif user.role == UserRole.agent:
+    elif user.role in (UserRole.agent, UserRole.department_head):
         query = query.where(
             or_(
                 Ticket.department_id == user.department_id,
@@ -372,5 +416,15 @@ async def get_tickets(db: AsyncSession, user: User, filters: dict) -> tuple[list
 
     page = filters.get("page", 1)
     page_size = filters.get("page_size", 20)
+
+    # Load all relationships in 2 extra queries (selectin) instead of 6 separate ones
+    query = query.options(
+        joinedload(Ticket.priority),
+        joinedload(Ticket.ticket_type),
+        joinedload(Ticket.department),
+        selectinload(Ticket.requester),
+        selectinload(Ticket.assignee),
+        selectinload(Ticket.tags),
+    )
     result = await db.execute(query.offset((page - 1) * page_size).limit(page_size))
-    return result.scalars().all(), total or 0
+    return result.unique().scalars().all(), total or 0

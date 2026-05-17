@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Button, Card, Col, Descriptions, Divider, Dropdown, Row,
+  Alert, Button, Card, Col, Descriptions, Divider, Dropdown, Form, Input, Modal, Row,
   Select, Skeleton, Space, Tabs, Tag, Typography, message,
 } from 'antd'
 import { ArrowLeftOutlined, DownOutlined, MergeCellsOutlined } from '@ant-design/icons'
@@ -19,7 +19,6 @@ import { STATUS_TRANSITIONS, STATUS_LABELS, PRIORITY_LABELS } from '../../../typ
 
 function getAllowedTransitions(status: TicketStatus, role: string | undefined): TicketStatus[] {
   const all = STATUS_TRANSITIONS[status] ?? []
-  // resolved → in_progress only for user and admin, not agent
   if (status === 'resolved' && role === 'agent') return []
   return all
 }
@@ -48,7 +47,8 @@ export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const currentUser = useAuthStore(s => s.user)
-  const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'agent'
+  const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'agent' || currentUser?.role === 'department_head'
+  const canAssign = currentUser?.role === 'admin' || currentUser?.role === 'department_head'
 
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -60,6 +60,8 @@ export default function TicketDetailPage() {
   const [agents, setAgents] = useState<User[]>([])
   const [actionLoading, setActionLoading] = useState(false)
   const [showMergeModal, setShowMergeModal] = useState(false)
+  const [cancelModal, setCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const lastTicketEvent = useTicketEventStore(s => s.lastEvent)
 
   // Real-time: react to SSE events for this ticket
@@ -69,7 +71,6 @@ export default function TicketDetailPage() {
 
     if (lastTicketEvent.type === 'new_comment' && lastTicketEvent.comment) {
       const incoming = lastTicketEvent.comment
-      // Не добавляем собственные комментарии: они уже добавлены через onCommentCreated
       if (incoming.author_id === currentUser?.id) return
       setComments(prev => {
         if (prev.some(c => c.id === incoming.id)) return prev
@@ -112,13 +113,34 @@ export default function TicketDetailPage() {
       .finally(() => setLoading(false))
   }, [id])
 
-  async function handleStatusChange(status: TicketStatus) {
+  async function handleStatusChange(newStatus: TicketStatus) {
     if (!ticket) return
+    // Cancellation requires a reason
+    if (newStatus === 'cancelled') {
+      setCancelModal(true)
+      return
+    }
     setActionLoading(true)
     try {
-      const updated = await changeTicketStatus(ticket.id, { status })
+      const updated = await changeTicketStatus(ticket.id, { status: newStatus })
       setTicket(updated)
-      message.success(`Статус изменён: ${STATUS_LABELS[status]}`)
+      message.success(`Статус изменён: ${STATUS_LABELS[newStatus]}`)
+    } catch (e) {
+      message.error(getErrorMessage(e))
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleConfirmCancel() {
+    if (!ticket || !cancelReason.trim()) return
+    setActionLoading(true)
+    try {
+      const updated = await changeTicketStatus(ticket.id, { status: 'cancelled', comment: cancelReason.trim() })
+      setTicket(updated)
+      message.success('Заявка отменена')
+      setCancelModal(false)
+      setCancelReason('')
     } catch (e) {
       message.error(getErrorMessage(e))
     } finally {
@@ -178,11 +200,29 @@ export default function TicketDetailPage() {
     }
   }
 
+  // Can this user write comments?
+  const canComment = (() => {
+    if (!ticket || !currentUser) return false
+    if (currentUser.role === 'admin') return true
+    if (currentUser.role === 'department_head') return true
+    if (currentUser.role === 'agent') {
+      return ticket.assignee_id === currentUser.id || ticket.creator_id === currentUser.id
+    }
+    return true // user role — portal handles it separately
+  })()
+
   if (loading) return <Skeleton active paragraph={{ rows: 12 }} />
   if (!ticket) return <Typography.Text type="danger">Заявка не найдена</Typography.Text>
 
   const nextStatuses = getAllowedTransitions(ticket.status, currentUser?.role)
   const canMerge = canEdit && !['merged', 'resolved', 'cancelled'].includes(ticket.status)
+
+  // For dept_head: only show agents from their own department
+  const assignableAgents = currentUser?.role === 'department_head'
+    ? agents.filter(u => u.department_id === currentUser.department_id)
+    : ticket.department_id
+      ? agents.filter(u => u.department_id === ticket.department_id)
+      : agents
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
@@ -225,6 +265,33 @@ export default function TicketDetailPage() {
           onClose={() => setShowMergeModal(false)}
         />
       )}
+
+      {/* Cancellation reason modal */}
+      <Modal
+        open={cancelModal}
+        title="Причина отмены"
+        onOk={handleConfirmCancel}
+        onCancel={() => { setCancelModal(false); setCancelReason('') }}
+        okText="Отменить заявку"
+        okButtonProps={{ danger: true, disabled: !cancelReason.trim(), loading: actionLoading }}
+        cancelText="Назад"
+      >
+        <Form layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item
+            label="Укажите причину отмены"
+            required
+            help="Это поле обязательно для заполнения"
+          >
+            <Input.TextArea
+              rows={4}
+              placeholder="Опишите причину отмены заявки..."
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              autoFocus
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* Header */}
       <Card style={{ marginBottom: 16 }}>
@@ -304,10 +371,16 @@ export default function TicketDetailPage() {
                         setComments(prev => prev.filter(c => c.id !== cid))
                       }
                     />
-                    <CommentForm
-                      ticketId={ticket.id}
-                      onCommentCreated={c => setComments(prev => [...prev, c])}
-                    />
+                    {canComment ? (
+                      <CommentForm
+                        ticketId={ticket.id}
+                        onCommentCreated={c => setComments(prev => [...prev, c])}
+                      />
+                    ) : (
+                      <div style={{ padding: '12px 0', color: '#999', fontSize: 13 }}>
+                        Писать комментарии может только исполнитель или руководитель отдела.
+                      </div>
+                    )}
                   </div>
                 ),
               },
@@ -360,7 +433,7 @@ export default function TicketDetailPage() {
               </Descriptions.Item>
 
               <Descriptions.Item label="Отдел">
-                {canEdit ? (
+                {canAssign ? (
                   <Select
                     size="small"
                     value={ticket.department_id ?? undefined}
@@ -377,7 +450,7 @@ export default function TicketDetailPage() {
               </Descriptions.Item>
 
               <Descriptions.Item label="Исполнитель">
-                {canEdit ? (
+                {canAssign ? (
                   <Select
                     size="small"
                     value={ticket.assignee_id ?? undefined}
@@ -385,10 +458,7 @@ export default function TicketDetailPage() {
                     loading={actionLoading}
                     allowClear
                     style={{ width: '100%' }}
-                    options={(ticket.department_id
-                      ? agents.filter(u => u.department_id === ticket.department_id)
-                      : agents
-                    ).map(u => ({ value: u.id, label: u.full_name || u.username }))}
+                    options={assignableAgents.map(u => ({ value: u.id, label: u.full_name || u.username }))}
                     placeholder="Не назначен"
                   />
                 ) : (

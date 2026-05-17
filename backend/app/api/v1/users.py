@@ -56,7 +56,7 @@ async def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     query = select(User)
 
@@ -131,7 +131,7 @@ async def get_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role == UserRole.user:
+    if current_user.role not in (UserRole.admin, UserRole.department_head, UserRole.agent):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
 
     user = await db.get(User, user_id)

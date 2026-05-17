@@ -8,11 +8,17 @@ import { getErrorMessage } from '../../types/common'
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Администратор' },
+  { value: 'department_head', label: 'Руководитель отдела' },
   { value: 'agent', label: 'Агент поддержки' },
   { value: 'user', label: 'Пользователь' },
 ]
 
-const ROLE_COLOR: Record<string, string> = { admin: 'red', agent: 'blue', user: 'default' }
+const ROLE_COLOR: Record<string, string> = {
+  admin: 'red',
+  department_head: 'purple',
+  agent: 'blue',
+  user: 'default',
+}
 
 export default function UsersTab() {
   const [users, setUsers] = useState<User[]>([])

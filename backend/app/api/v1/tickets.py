@@ -98,7 +98,7 @@ async def update_ticket(
     ticket_id: int,
     data: TicketUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:
@@ -146,7 +146,7 @@ async def assign_ticket_endpoint(
     data: AssignRequest,
     db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:
@@ -163,7 +163,7 @@ async def change_ticket_priority(
     ticket_id: int,
     data: PriorityChangeRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     from app.models.priority import Priority
     ticket = await db.get(Ticket, ticket_id)
@@ -220,7 +220,7 @@ async def merge_ticket_endpoint(
     data: MergeRequest,
     db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:

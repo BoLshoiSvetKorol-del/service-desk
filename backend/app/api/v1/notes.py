@@ -17,7 +17,7 @@ router = APIRouter()
 async def list_notes(
     ticket_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:
@@ -37,7 +37,7 @@ async def create_note(
     ticket_id: int,
     data: TicketNoteCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:
@@ -57,7 +57,7 @@ async def update_note(
     note_id: int,
     data: TicketNoteUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     note = await db.get(TicketNote, note_id)
     if not note or note.ticket_id != ticket_id:
@@ -76,7 +76,7 @@ async def delete_note(
     ticket_id: int,
     note_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     note = await db.get(TicketNote, note_id)
     if not note or note.ticket_id != ticket_id:

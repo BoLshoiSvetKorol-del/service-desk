@@ -25,7 +25,7 @@ async def list_tags(
 async def create_tag(
     data: TagCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     existing = await db.scalar(select(Tag).where(Tag.name == data.name))
     if existing:
@@ -55,7 +55,7 @@ async def set_ticket_tags(
     ticket_id: int,
     data: SetTagsRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:

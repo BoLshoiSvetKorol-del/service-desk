@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Layout, Menu } from 'antd'
+import { Layout, Menu, Typography } from 'antd'
 import {
   DashboardOutlined,
   FileTextOutlined,
@@ -11,8 +11,11 @@ import { useAuthStore } from '../../../store/authStore'
 
 const { Sider } = Layout
 
-export default function AppSidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+interface SidebarMenuProps {
+  onNavigate?: () => void
+}
+
+export function SidebarMenu({ onNavigate }: SidebarMenuProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
@@ -31,23 +34,45 @@ export default function AppSidebar() {
   const selectedKey = '/' + location.pathname.split('/')[1]
 
   return (
-    <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light">
-      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 700, fontSize: collapsed ? 14 : 16, color: '#1677ff', padding: '0 16px',
-                    flexDirection: 'column', lineHeight: 1.2, gap: 2 }}>
-        {collapsed ? 'ЭТ' : (
-          <>
-            <span style={{ fontSize: 16 }}>Service Desk</span>
-            <span style={{ fontSize: 10, fontWeight: 400, color: '#888' }}>Экспресс Технологии</span>
-          </>
-        )}
+    <>
+      <div
+        style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          color: '#1677ff',
+          padding: '0 16px',
+          flexDirection: 'column',
+          lineHeight: 1.2,
+          gap: 2,
+        }}
+      >
+        <Typography.Text strong style={{ fontSize: 16, color: '#1677ff' }}>Service Desk</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: 10 }}>Экспресс Технологии</Typography.Text>
       </div>
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}
         items={items}
-        onClick={({ key }) => navigate(key)}
+        onClick={({ key }) => { navigate(key); onNavigate?.() }}
       />
+    </>
+  )
+}
+
+export default function AppSidebar() {
+  const [collapsed, setCollapsed] = useState(false)
+
+  return (
+    <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light">
+      {collapsed ? (
+        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 700, fontSize: 14, color: '#1677ff' }}>ЭТ</div>
+      ) : (
+        <SidebarMenu />
+      )}
     </Sider>
   )
 }
