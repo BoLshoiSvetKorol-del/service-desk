@@ -38,7 +38,8 @@ class AuthService:
         self.db = db
         self.redis = redis
 
-    async def login(self, username: str, password: str) -> tuple[str, str, User] | None:
+    async def login(self, username: str, password: str) -> tuple[str, str, User] | None | str:
+        """Returns None on bad credentials, 'unverified' if email not verified, else tokens tuple."""
         from sqlalchemy import or_
         user = await self.db.scalar(
             select(User).where(or_(User.username == username, User.email == username))
@@ -47,6 +48,8 @@ class AuthService:
             return None
         if not user.is_active:
             return None
+        if settings.REQUIRE_EMAIL_VERIFICATION and not user.is_email_verified:
+            return "unverified"
         access_token = create_access_token(user.id, user.role.value)
         refresh_token, _ = create_refresh_token(user.id)
         return access_token, refresh_token, user

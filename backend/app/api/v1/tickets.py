@@ -178,6 +178,16 @@ async def change_ticket_priority(
     old_priority = await db.get(Priority, ticket.priority_id)
     ticket.priority_id = data.priority_id
 
+    # Пересчитываем SLA дедлайн от момента создания с новым приоритетом
+    if ticket.status not in (TicketStatus.resolved, TicketStatus.cancelled):
+        from app.services.sla_service import calculate_deadline
+        from datetime import timezone
+        created = ticket.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        ticket.sla_deadline = calculate_deadline(created, priority.sla_hours)
+        ticket.sla_violated = False
+
     from app.models.ticket_history import TicketHistory
     db.add(TicketHistory(
         ticket_id=ticket.id,

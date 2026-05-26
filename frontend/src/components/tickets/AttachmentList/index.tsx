@@ -1,4 +1,4 @@
-import { Button, Image, List, Popconfirm, Space, Typography } from 'antd'
+import { Button, List, Popconfirm, Space, Typography } from 'antd'
 import {
   DownloadOutlined, DeleteOutlined,
   FileOutlined, FileImageOutlined, FilePdfOutlined,
@@ -7,6 +7,7 @@ import {
 import type { Attachment } from '../../../types/ticket'
 import { downloadAttachment } from '../../../api/attachments'
 import { message } from 'antd'
+import AuthImage from '../../common/AuthImage'
 
 function getFileIcon(mimetype: string) {
   if (mimetype.startsWith('image/')) return <FileImageOutlined style={{ color: '#52c41a', fontSize: 20 }} />
@@ -46,27 +47,28 @@ export default function AttachmentList({ attachments, canDelete = false, onDelet
     }
   }
 
-  const images = attachments.filter(a => a.mimetype.startsWith('image/') && a.url)
-  const others = attachments.filter(a => !a.mimetype.startsWith('image/') || !a.url)
+  const images = attachments.filter(a => a.mimetype.startsWith('image/'))
+  const others = attachments.filter(a => !a.mimetype.startsWith('image/'))
 
   return (
     <div>
       {images.length > 0 && (
         <div style={{ marginBottom: 12 }}>
-          <Image.PreviewGroup>
-            <Space wrap size={8}>
-              {images.map(a => (
-                <div key={a.id} style={{ position: 'relative' }}>
-                  <Image
-                    src={a.url}
-                    width={80}
-                    height={80}
-                    style={{ objectFit: 'cover', borderRadius: 4, border: '1px solid #f0f0f0' }}
-                    fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+          <Space wrap size={8}>
+            {images.map(a => (
+              <div key={a.id} style={{ position: 'relative' }}>
+                <AuthImage attachmentId={a.id} filename={a.original_filename} />
+                <div style={{ fontSize: 11, color: '#888', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {a.original_filename}
+                </div>
+                <Space size={2} style={{ display: 'flex', justifyContent: 'center' }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    style={{ padding: '0 2px', fontSize: 11 }}
+                    onClick={() => handleDownload(a)}
                   />
-                  <div style={{ fontSize: 11, color: '#888', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {a.original_filename}
-                  </div>
                   {canDelete && onDelete && (
                     <Popconfirm
                       title="Удалить файл?"
@@ -76,18 +78,18 @@ export default function AttachmentList({ attachments, canDelete = false, onDelet
                       okType="danger"
                     >
                       <Button
-                        type="text"
+                        type="link"
                         danger
                         size="small"
                         icon={<DeleteOutlined />}
-                        style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(255,255,255,0.8)', padding: '0 2px' }}
+                        style={{ padding: '0 2px', fontSize: 11 }}
                       />
                     </Popconfirm>
                   )}
-                </div>
-              ))}
-            </Space>
-          </Image.PreviewGroup>
+                </Space>
+              </div>
+            ))}
+          </Space>
         </div>
       )}
 

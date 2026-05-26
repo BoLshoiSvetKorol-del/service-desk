@@ -228,45 +228,64 @@ async def export_tickets(
         writer.writerow(headers_row)
         writer.writerows(data)
         output.seek(0)
-        fname_csv = f"Ticket_System_{period_label}.csv"
+        from urllib.parse import quote
+        fname_csv = f"Отчёт_ServiceDesk_{period_label}.csv"
+        encoded_csv = quote(fname_csv, encoding="utf-8")
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{fname_csv}"'},
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_csv}"},
         )
 
     # xlsx
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Заявки"
 
+    # Строка-шапка с заголовком отчёта
+    title_text = f"Отчёт по инцидентам Service Desk · {period_label}"
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers_row))
+    title_cell = ws.cell(row=1, column=1, value=title_text)
+    title_cell.font = Font(bold=True, size=13, color="1677FF")
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 24
+
+    # Строка заголовков колонок
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(fill_type="solid", fgColor="1677FF")
 
     for col_idx, header in enumerate(headers_row, start=1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell = ws.cell(row=2, column=col_idx, value=header)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center")
 
-    for row_idx, row in enumerate(data, start=2):
+    # Данные начинаются с 3-й строки
+    for row_idx, row in enumerate(data, start=3):
         for col_idx, value in enumerate(row, start=1):
             ws.cell(row=row_idx, column=col_idx, value=value)
 
-    # Автоширина колонок
-    for col in ws.columns:
-        max_len = max((len(str(c.value or "")) for c in col), default=10)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+    # Автоширина колонок (учитываем заголовки и данные)
+    for col_idx, col in enumerate(ws.columns, start=1):
+        max_len = max((len(str(c.value or "")) for c in col if c.row >= 2), default=10)
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 4, 50)
+
+    # Защита листа от редактирования (только просмотр)
+    ws.protection.sheet = True
+    ws.protection.enable()
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname_xlsx = f"Ticket_System_{period_label}.xlsx"
+    from urllib.parse import quote
+    fname_xlsx = f"Отчёт_ServiceDesk_{period_label}.xlsx"
+    encoded_xlsx = quote(fname_xlsx, encoding="utf-8")
     return StreamingResponse(
         iter([buf.read()]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname_xlsx}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_xlsx}"},
     )

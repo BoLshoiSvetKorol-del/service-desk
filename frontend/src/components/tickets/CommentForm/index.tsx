@@ -13,9 +13,10 @@ const { Dragger } = Upload
 interface Props {
   ticketId: number
   onCommentCreated: (comment: Comment) => void
+  onAttachmentsChanged?: () => void
 }
 
-export default function CommentForm({ ticketId, onCommentCreated }: Props) {
+export default function CommentForm({ ticketId, onCommentCreated, onAttachmentsChanged }: Props) {
   const [body, setBody] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [fileList, setFileList] = useState<UploadFile[]>([])
@@ -42,14 +43,19 @@ export default function CommentForm({ ticketId, onCommentCreated }: Props) {
       setIsInternal(false)
       setFileList([])
 
+      let anyUploaded = false
       for (const f of fileList) {
         if (f.originFileObj) {
           try {
             await uploadCommentAttachment(ticketId, comment.id, f.originFileObj)
+            anyUploaded = true
           } catch {
             message.warning(`Не удалось загрузить файл: ${f.name}`)
           }
         }
+      }
+      if (anyUploaded) {
+        onAttachmentsChanged?.()
       }
     } catch (e) {
       message.error(getErrorMessage(e))

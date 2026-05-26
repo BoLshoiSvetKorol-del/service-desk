@@ -31,6 +31,11 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный логин или пароль",
         )
+    if result == "unverified":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email не подтверждён. Проверьте почту и перейдите по ссылке из письма.",
+        )
     access_token, refresh_token, user = result
     return TokenResponse(
         access_token=access_token,
@@ -92,7 +97,9 @@ def _generate_username(email: str, existing: set[str]) -> str:
 async def register(
     data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
 ):
+    from app.config import settings as _s
     existing_email = await db.scalar(select(User).where(User.email == data.email))
     if existing_email:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот email уже зарегистрирован")
@@ -102,6 +109,7 @@ async def register(
     all_usernames = {row[0] for row in all_usernames_result.fetchall()}
     username = _generate_username(data.email, all_usernames)
 
+    auto_verify = not _s.REQUIRE_EMAIL_VERIFICATION
     user = User(
         email=data.email,
         username=username,
@@ -109,11 +117,30 @@ async def register(
         full_name=data.full_name,
         role=UserRole.user,
         is_active=True,
-        is_email_verified=True,  # AUTO-VERIFIED: email confirmation disabled for local mode
+        is_email_verified=auto_verify,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    if not auto_verify:
+        # Отправляем письмо с подтверждением
+        token = secrets.token_urlsafe(32)
+        await redis.setex(f"email_verify:{token}", _VERIFY_TTL, str(user.id))
+        try:
+            from app.tasks.email_tasks import send_email_task
+            send_email_task.delay(
+                to=user.email,
+                template="email_verification.html",
+                context={
+                    "full_name": user.full_name,
+                    "token": token,
+                    "verify_url": f"{_s.PORTAL_URL}/portal/verify?token={token}",
+                },
+                subject="Подтвердите email для входа в Service Desk",
+            )
+        except Exception:
+            pass
 
     return UserResponse.model_validate(user)
 

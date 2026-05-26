@@ -34,6 +34,7 @@ import ActivityTimeline from '../../../components/tickets/ActivityTimeline'
 import MergeModal from '../../../components/tickets/MergeModal'
 import TagSelector from '../../../components/tickets/TagSelector'
 import NotesTab from '../../../components/tickets/NotesTab'
+import SatisfactionRating from '../../../components/tickets/SatisfactionRating'
 import { getErrorMessage } from '../../../types/common'
 
 function formatDate(d: string) {
@@ -104,7 +105,7 @@ export default function TicketDetailPage() {
         setTicket(t)
         setPriorities(ps)
         setDepartments(ds)
-        setAgents(us.items.filter(u => u.role !== 'user'))
+        setAgents(us.items.filter(u => u.role !== 'user' && u.role !== 'admin'))
         setComments(cs)
         setHistory(hist)
         setAttachments(atts)
@@ -375,6 +376,7 @@ export default function TicketDetailPage() {
                       <CommentForm
                         ticketId={ticket.id}
                         onCommentCreated={c => setComments(prev => [...prev, c])}
+                        onAttachmentsChanged={() => getTicketAttachments(ticket.id).then(setAttachments).catch(() => {})}
                       />
                     ) : (
                       <div style={{ padding: '12px 0', color: '#999', fontSize: 13 }}>
@@ -522,6 +524,16 @@ export default function TicketDetailPage() {
                 <Tag color="gold" style={{ width: '100%', textAlign: 'center' }}>
                   SLA на паузе
                 </Tag>
+              </>
+            )}
+
+            {ticket.status === 'resolved' && (
+              <>
+                <Divider style={{ margin: '8px 0' }} />
+                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                  Оценка клиента
+                </Typography.Text>
+                <SatisfactionRating ticketId={ticket.id} readOnly />
               </>
             )}
           </Card>

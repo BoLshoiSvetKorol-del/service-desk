@@ -11,8 +11,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getTicket, changeTicketStatus, getTicketAttachments } from '../../../api/tickets'
 import { getComments, createComment } from '../../../api/comments'
 import type { Ticket, Comment, Attachment } from '../../../types/ticket'
-import { STATUS_LABELS, PRIORITY_LABELS } from '../../../types/ticket'
+import { STATUS_LABELS } from '../../../types/ticket'
 import AttachmentList from '../../../components/tickets/AttachmentList'
+import SatisfactionRating from '../../../components/tickets/SatisfactionRating'
 import { useAuthStore } from '../../../store/authStore'
 import { useTicketEventStore } from '../../../store/ticketEventStore'
 import { getErrorMessage } from '../../../types/common'
@@ -289,6 +290,13 @@ export default function PortalTicketDetailPage() {
               </div>
             )}
           </Card>
+
+          {/* Блок оценки — только для выполненных инцидентов */}
+          {ticket.status === 'resolved' && (
+            <div style={{ marginTop: 12 }}>
+              <SatisfactionRating ticketId={ticket.id} />
+            </div>
+          )}
         </Col>
 
         <Col xs={24} md={8}>

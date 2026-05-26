@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # Базовый URL для ссылок в письмах
     PORTAL_URL: str = "http://localhost"
 
+    REQUIRE_EMAIL_VERIFICATION: bool = False
+
     STORAGE_BACKEND: str = "local"
     UPLOAD_PATH: str = "/app/uploads"
     MAX_FILE_SIZE_MB: int = 10

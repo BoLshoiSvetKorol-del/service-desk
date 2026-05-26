@@ -87,6 +87,7 @@ export interface TicketUpdateRequest {
 
 export interface StatusChangeRequest {
   status: TicketStatus
+  comment?: string
 }
 
 export interface AssignRequest {

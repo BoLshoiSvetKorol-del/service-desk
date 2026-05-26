@@ -57,8 +57,13 @@ export async function exportTickets(format: 'csv' | 'xlsx', params?: ReportParam
   })
   const ext = format === 'xlsx' ? 'xlsx' : 'csv'
   const disposition: string = res.headers['content-disposition'] ?? ''
-  const match = disposition.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/)
-  const filename = match ? match[1] : `Ticket_System.${ext}`
+  // Try RFC 5987 encoded name first (filename*=UTF-8''...)
+  const rfc5987Match = disposition.match(/filename\*=UTF-8''([^;\s]+)/i)
+  const fallbackMatch = disposition.match(/filename=["']?([^"';\n]+)["']?/)
+  const rawFilename = rfc5987Match
+    ? decodeURIComponent(rfc5987Match[1])
+    : fallbackMatch ? fallbackMatch[1] : `Отчёт_ServiceDesk.${ext}`
+  const filename = rawFilename
   const url = URL.createObjectURL(res.data as Blob)
   const a = document.createElement('a')
   a.href = url

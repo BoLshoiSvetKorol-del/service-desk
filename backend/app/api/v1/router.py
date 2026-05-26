@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth, users, departments, priorities, ticket_types,
     tickets, comments, attachments, filters, reports,
-    events, notifications, tags, notes, routing_rules, dashboard,
+    events, notifications, tags, notes, routing_rules, dashboard, ratings,
 )
 
 api_router = APIRouter()
@@ -23,3 +23,4 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(tags.router, prefix="/tags", tags=["tags"])
 api_router.include_router(notes.router, prefix="", tags=["notes"])
 api_router.include_router(routing_rules.router, prefix="/routing-rules", tags=["routing-rules"])
+api_router.include_router(ratings.router, prefix="", tags=["ratings"])
