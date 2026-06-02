@@ -146,7 +146,7 @@ async def assign_ticket_endpoint(
     data: AssignRequest,
     db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.department_head, UserRole.agent)),
 ):
     ticket = await db.get(Ticket, ticket_id)
     if not ticket:

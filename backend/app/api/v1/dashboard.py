@@ -15,7 +15,7 @@ async def dashboard_stats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Single query for all dashboard counters."""
+    """Dashboard counters scoped by role."""
     base = select(
         func.count(Ticket.id).label("total"),
         func.sum(case((Ticket.status == TicketStatus.new, 1), else_=0)).label("new_count"),
@@ -24,15 +24,19 @@ async def dashboard_stats(
     )
 
     if current_user.role == UserRole.user:
+        # portal user — only their own tickets
         base = base.where(Ticket.requester_id == current_user.id)
     elif current_user.role == UserRole.agent:
-        base = base.where(
-            or_(
-                Ticket.department_id == current_user.department_id,
-                Ticket.assignee_id == current_user.id,
-                Ticket.requester_id == current_user.id,
-            )
-        )
+        # agent — only tickets explicitly assigned to them
+        base = base.where(Ticket.assignee_id == current_user.id)
+    elif current_user.role == UserRole.department_head:
+        # dept head — all tickets in their department
+        if current_user.department_id is not None:
+            base = base.where(Ticket.department_id == current_user.department_id)
+        else:
+            # no department assigned → show nothing (avoid confusion)
+            base = base.where(Ticket.id == -1)
+    # admin: no filter → sees everything
 
     row = (await db.execute(base)).one()
 

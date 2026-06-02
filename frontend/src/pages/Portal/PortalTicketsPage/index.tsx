@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { getTickets } from '../../../api/tickets'
 import type { TicketListItem } from '../../../types/ticket'
 import { STATUS_LABELS } from '../../../types/ticket'
+import { useTicketEventStore } from '../../../store/ticketEventStore'
 
 const STATUS_COLOR: Record<string, string> = {
   new: 'blue', in_progress: 'cyan', waiting_info: 'gold',
@@ -19,19 +20,27 @@ export default function PortalTicketsPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | undefined>()
+  const lastTicketEvent = useTicketEventStore(s => s.lastEvent)
 
-  useEffect(() => {
+  function loadTickets(p = page) {
     setLoading(true)
-    getTickets({
-      page,
-      page_size: 10,
-      search: search || undefined,
-      status: statusFilter,
-    })
+    getTickets({ page: p, page_size: 10, search: search || undefined, status: statusFilter })
       .then(res => { setTickets(res.items); setTotal(res.total) })
       .catch(() => message.error('Ошибка загрузки инцидентов'))
       .finally(() => setLoading(false))
-  }, [page, search, statusFilter])
+  }
+
+  useEffect(() => {
+    loadTickets()
+  }, [page, search, statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time: reload when status changes or new ticket
+  useEffect(() => {
+    if (!lastTicketEvent) return
+    if (['ticket_created', 'status_changed'].includes(lastTicketEvent.type)) {
+      loadTickets()
+    }
+  }, [lastTicketEvent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns = [
     {

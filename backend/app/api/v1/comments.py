@@ -66,15 +66,6 @@ async def create_comment(
     if data.is_internal and current_user.role == UserRole.user:
         raise HTTPException(status_code=403, detail="Пользователи не могут создавать внутренние комментарии")
 
-    # Write access: assignee, department_head of ticket's dept, admin, or requester (portal)
-    # Agents/dept_head from same dept who are NOT the assignee can only read
-    if current_user.role == UserRole.agent:
-        is_assignee = ticket.assignee_id == current_user.id
-        is_requester = ticket.requester_id == current_user.id
-        if not is_assignee and not is_requester:
-            raise HTTPException(status_code=403,
-                                detail="Только исполнитель заявки может писать комментарии")
-
     comment = Comment(
         ticket_id=ticket_id,
         author_id=current_user.id,
@@ -127,10 +118,8 @@ async def update_comment(
     _check_ticket_access(ticket, current_user)
     comment = await _get_comment_or_404(db, ticket_id, comment_id)
 
-    # Only admin and department_head can edit comments
-    can_edit = current_user.role in (UserRole.admin, UserRole.department_head)
-    if not can_edit:
-        raise HTTPException(status_code=403, detail="Редактировать комментарии может только руководитель отдела")
+    if comment.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Редактировать можно только свои комментарии")
 
     comment.body = data.body
     await db.commit()
@@ -149,8 +138,10 @@ async def delete_comment(
     _check_ticket_access(ticket, current_user)
     comment = await _get_comment_or_404(db, ticket_id, comment_id)
 
-    if current_user.role not in (UserRole.admin, UserRole.department_head):
-        raise HTTPException(status_code=403, detail="Удалять комментарии может только руководитель отдела")
+    can_delete = (current_user.role in (UserRole.admin, UserRole.department_head)
+                  or comment.author_id == current_user.id)
+    if not can_delete:
+        raise HTTPException(status_code=403, detail="Нет прав на удаление комментария")
 
     await db.delete(comment)
     await db.commit()

@@ -4,6 +4,7 @@ export interface ReportParams {
   date_from?: string
   date_to?: string
   department_id?: number
+  assignee_id?: number
   type_id?: number
   priority_id?: number
   groupby?: 'day' | 'week' | 'month'

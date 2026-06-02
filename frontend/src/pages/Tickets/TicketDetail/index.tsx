@@ -19,7 +19,11 @@ import { STATUS_TRANSITIONS, STATUS_LABELS, PRIORITY_LABELS } from '../../../typ
 
 function getAllowedTransitions(status: TicketStatus, role: string | undefined): TicketStatus[] {
   const all = STATUS_TRANSITIONS[status] ?? []
-  if (status === 'resolved' && role === 'agent') return []
+  if (role === 'user') {
+    if (status === 'resolved') return ['in_progress']
+    if (status === 'new') return ['cancelled']
+    return []
+  }
   return all
 }
 import type { Department, User } from '../../../types/user'
@@ -49,7 +53,7 @@ export default function TicketDetailPage() {
   const navigate = useNavigate()
   const currentUser = useAuthStore(s => s.user)
   const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'agent' || currentUser?.role === 'department_head'
-  const canAssign = currentUser?.role === 'admin' || currentUser?.role === 'department_head'
+  const canAssign = currentUser?.role === 'admin' || currentUser?.role === 'department_head' || currentUser?.role === 'agent'
 
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -96,23 +100,27 @@ export default function TicketDetailPage() {
       getTicket(Number(id)),
       getPriorities(),
       getDepartments(),
-      getUsers({ page_size: 100 }),
       getComments(Number(id)),
       getTicketHistory(Number(id)),
       getTicketAttachments(Number(id)),
     ])
-      .then(([t, ps, ds, us, cs, hist, atts]) => {
+      .then(([t, ps, ds, cs, hist, atts]) => {
         setTicket(t)
         setPriorities(ps)
         setDepartments(ds)
-        setAgents(us.items.filter(u => u.role !== 'user' && u.role !== 'admin'))
         setComments(cs)
         setHistory(hist)
         setAttachments(atts)
       })
       .catch((e) => message.error('Ошибка загрузки заявки: ' + (e?.response?.data?.detail ?? e?.message ?? 'неизвестная ошибка')))
       .finally(() => setLoading(false))
-  }, [id])
+    // Users list only needed for assign panel — load separately to not block page
+    if (canAssign) {
+      getUsers({ page_size: 100 })
+        .then(us => setAgents(us.items.filter(u => u.role !== 'user' && u.role !== 'admin')))
+        .catch(() => {})
+    }
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleStatusChange(newStatus: TicketStatus) {
     if (!ticket) return
@@ -201,16 +209,7 @@ export default function TicketDetailPage() {
     }
   }
 
-  // Can this user write comments?
-  const canComment = (() => {
-    if (!ticket || !currentUser) return false
-    if (currentUser.role === 'admin') return true
-    if (currentUser.role === 'department_head') return true
-    if (currentUser.role === 'agent') {
-      return ticket.assignee_id === currentUser.id || ticket.creator_id === currentUser.id
-    }
-    return true // user role — portal handles it separately
-  })()
+  const canComment = !!(ticket && currentUser)
 
   if (loading) return <Skeleton active paragraph={{ rows: 12 }} />
   if (!ticket) return <Typography.Text type="danger">Заявка не найдена</Typography.Text>
@@ -218,12 +217,7 @@ export default function TicketDetailPage() {
   const nextStatuses = getAllowedTransitions(ticket.status, currentUser?.role)
   const canMerge = canEdit && !['merged', 'resolved', 'cancelled'].includes(ticket.status)
 
-  // For dept_head: only show agents from their own department
-  const assignableAgents = currentUser?.role === 'department_head'
-    ? agents.filter(u => u.department_id === currentUser.department_id)
-    : ticket.department_id
-      ? agents.filter(u => u.department_id === ticket.department_id)
-      : agents
+  const assignableAgents = agents
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>

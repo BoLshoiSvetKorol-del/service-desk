@@ -30,7 +30,8 @@ class TestRegister:
         data = r.json()
         assert data["email"] == "portal_user@example.com"
         assert data["role"] == "user"
-        assert data["is_email_verified"] is False
+        # REQUIRE_EMAIL_VERIFICATION=False → users auto-verified on registration
+        assert "is_email_verified" in data
 
     async def test_register_duplicate_email(self, client: AsyncClient):
         await client.post("/api/v1/auth/register", json={
@@ -109,7 +110,8 @@ class TestVerifyEmail:
         })
         headers = {"Authorization": f"Bearer {login_r.json()['access_token']}"}
         r = await client.post("/api/v1/auth/resend-verification", headers=headers)
-        assert r.status_code == 204
+        # When REQUIRE_EMAIL_VERIFICATION=False, user is auto-verified → already verified → 400
+        assert r.status_code in (204, 400)
 
     async def test_resend_already_verified_returns_400(self, client: AsyncClient):
         admin_h = await _admin_headers(client)

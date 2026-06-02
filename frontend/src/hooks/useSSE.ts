@@ -159,6 +159,14 @@ export function useSSE() {
           }
           break
         }
+        case 'ticket_created':
+          publishEvent({
+            type: 'ticket_created',
+            ticketId: data.ticket_id as number,
+            ticketNumber: String(data.ticket_number ?? ''),
+            payload: data,
+          })
+          break
         case 'sla_warning':
           notification.warning({
             message: 'Предупреждение SLA',

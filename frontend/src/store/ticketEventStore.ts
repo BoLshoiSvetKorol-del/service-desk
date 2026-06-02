@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Comment } from '../types/ticket'
 
 interface TicketEvent {
-  type: 'new_comment' | 'new_attachment' | 'status_changed' | 'assigned' | 'priority_changed'
+  type: 'new_comment' | 'new_attachment' | 'status_changed' | 'assigned' | 'priority_changed' | 'ticket_created'
   ticketId: number
   ticketNumber: string
   comment?: Comment

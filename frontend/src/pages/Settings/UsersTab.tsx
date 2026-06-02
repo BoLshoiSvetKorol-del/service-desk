@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Modal, Form, Input, Select, Space, Tag, message, Popconfirm } from 'antd'
+import { Table, Button, Modal, Form, Input, Select, Space, Tag, message, Popconfirm, Alert } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, toggleUserActive, UserCreateRequest } from '../../api/users'
 import { getDepartments } from '../../api/departments'
@@ -29,6 +29,7 @@ export default function UsersTab() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<User | null>(null)
   const [form] = Form.useForm()
+  const [selectedRole, setSelectedRole] = useState<string | undefined>(undefined)
 
   async function load(p = page) {
     setLoading(true)
@@ -51,12 +52,14 @@ export default function UsersTab() {
   function openCreate() {
     setEditing(null)
     form.resetFields()
+    setSelectedRole(undefined)
     setModalOpen(true)
   }
 
   function openEdit(user: User) {
     setEditing(user)
     form.setFieldsValue({ ...user, password: '' })
+    setSelectedRole(user.role)
     setModalOpen(true)
   }
 
@@ -153,11 +156,33 @@ export default function UsersTab() {
             </Form.Item>
           )}
           <Form.Item name="role" label="Роль" rules={[{ required: true }]}>
-            <Select options={ROLE_OPTIONS} />
+            <Select
+              options={ROLE_OPTIONS}
+              onChange={(v) => { setSelectedRole(v); form.setFieldValue('department_id', undefined) }}
+            />
           </Form.Item>
-          <Form.Item name="department_id" label="Отдел">
-            <Select allowClear options={departments.map(d => ({ value: d.id, label: d.name }))} />
+          <Form.Item
+            name="department_id"
+            label="Отдел"
+            rules={[{
+              required: selectedRole === 'agent' || selectedRole === 'department_head',
+              message: 'Обязательно для агентов и руководителей отдела',
+            }]}
+          >
+            <Select
+              allowClear={selectedRole !== 'agent' && selectedRole !== 'department_head'}
+              placeholder={selectedRole === 'agent' || selectedRole === 'department_head' ? 'Выберите отдел (обязательно)' : 'Не назначен'}
+              options={departments.map(d => ({ value: d.id, label: d.name }))}
+            />
           </Form.Item>
+          {(selectedRole === 'agent' || selectedRole === 'department_head') && (
+            <Alert
+              type="info"
+              showIcon
+              message="Отдел обязателен — без него сотрудник не будет видеть заявки"
+              style={{ marginTop: -16, marginBottom: 16 }}
+            />
+          )}
         </Form>
       </Modal>
     </>

@@ -9,12 +9,14 @@ import {
   getSLACompliance, exportTickets,
 } from '../../api/reports'
 import { getDepartments } from '../../api/departments'
+import { getUsers } from '../../api/users'
 import type {
   CountDataPoint, StatusDataPoint, AvgResolutionDataPoint, SLAComplianceData, ReportParams,
 } from '../../api/reports'
-import type { Department } from '../../types/user'
+import type { Department, User } from '../../types/user'
 import type { TicketStatus, PriorityName } from '../../types/ticket'
 import { STATUS_LABELS, PRIORITY_LABELS } from '../../types/ticket'
+import { useAuthStore } from '../../store/authStore'
 
 const { RangePicker } = DatePicker
 
@@ -137,8 +139,13 @@ function SLAComplianceBlock({ data }: { data: SLAComplianceData | null }) {
 }
 
 export default function ReportsPage() {
+  const currentUser = useAuthStore(s => s.user)
+  const isDeptHead = currentUser?.role === 'department_head'
+  const isAdmin = currentUser?.role === 'admin'
+
   const [params, setParams] = useState<ReportParams>({ groupby: 'day' })
   const [departments, setDepartments] = useState<Department[]>([])
+  const [deptAgents, setDeptAgents] = useState<User[]>([])
   const [countData, setCountData] = useState<CountDataPoint[]>([])
   const [statusData, setStatusData] = useState<StatusDataPoint[]>([])
   const [avgData, setAvgData] = useState<AvgResolutionDataPoint[]>([])
@@ -148,6 +155,16 @@ export default function ReportsPage() {
 
   useEffect(() => {
     getDepartments().then(setDepartments).catch(() => {})
+    // Load agents for dept_head (their own dept) or admin (all)
+    if (isDeptHead || isAdmin) {
+      const deptFilter = isDeptHead && currentUser?.department_id
+        ? { department_id: currentUser.department_id, page_size: 100 }
+        : { page_size: 100 }
+      getUsers(deptFilter).then(res => {
+        setDeptAgents(res.items.filter(u => u.role === 'agent' || u.role === 'department_head'))
+      }).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -157,22 +174,21 @@ export default function ReportsPage() {
 
   async function loadReports() {
     setLoading(true)
-    try {
-      const [count, status, avg, sla] = await Promise.all([
-        getTicketsCount(params),
-        getTicketsByStatus(params),
-        getAvgResolutionTime(params),
-        getSLACompliance(params),
-      ])
-      setCountData(count)
-      setStatusData(status)
-      setAvgData(avg)
-      setSlaData(sla)
-    } catch {
-      message.error('Ошибка загрузки отчётов')
-    } finally {
-      setLoading(false)
-    }
+    const [count, status, avg, sla] = await Promise.allSettled([
+      getTicketsCount(params),
+      getTicketsByStatus(params),
+      getAvgResolutionTime(params),
+      getSLACompliance(params),
+    ])
+    if (count.status === 'fulfilled') setCountData(count.value)
+    else message.error('Ошибка загрузки: количество заявок')
+    if (status.status === 'fulfilled') setStatusData(status.value)
+    else message.error('Ошибка загрузки: статусы')
+    if (avg.status === 'fulfilled') setAvgData(avg.value)
+    else message.error('Ошибка загрузки: среднее время')
+    if (sla.status === 'fulfilled') setSlaData(sla.value)
+    else message.error('Ошибка загрузки: SLA')
+    setLoading(false)
   }
 
   async function handleExport(format: 'csv' | 'xlsx') {
@@ -214,19 +230,38 @@ export default function ReportsPage() {
         <Space wrap>
           <RangePicker
             placeholder={['Дата от', 'Дата до']}
-            onChange={(_, strings) => {
-              const [from, to] = strings as [string, string]
-              setParams(prev => ({ ...prev, date_from: from || undefined, date_to: to || undefined }))
+            onChange={(dates) => {
+              setParams(prev => ({
+                ...prev,
+                date_from: dates?.[0]?.format('YYYY-MM-DD') ?? undefined,
+                date_to: dates?.[1]?.format('YYYY-MM-DD') ?? undefined,
+              }))
             }}
             format="DD.MM.YYYY"
           />
-          <Select
-            placeholder="Отдел"
-            allowClear
-            style={{ width: 180 }}
-            onChange={v => setParams(prev => ({ ...prev, department_id: v ?? undefined }))}
-            options={departments.map(d => ({ value: d.id, label: d.name }))}
-          />
+          {isAdmin && (
+            <Select
+              placeholder="Отдел"
+              allowClear
+              style={{ width: 180 }}
+              onChange={v => setParams(prev => ({ ...prev, department_id: v ?? undefined }))}
+              options={departments.map(d => ({ value: d.id, label: d.name }))}
+            />
+          )}
+          {isDeptHead && currentUser?.department_id && (
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              Отдел: <strong>{departments.find(d => d.id === currentUser.department_id)?.name ?? '—'}</strong>
+            </Typography.Text>
+          )}
+          {(isDeptHead || isAdmin) && deptAgents.length > 0 && (
+            <Select
+              placeholder="Сотрудник (все)"
+              allowClear
+              style={{ width: 200 }}
+              onChange={v => setParams(prev => ({ ...prev, assignee_id: v ?? undefined }))}
+              options={deptAgents.map(u => ({ value: u.id, label: u.full_name || u.username }))}
+            />
+          )}
           <Select
             value={params.groupby ?? 'day'}
             style={{ width: 140 }}

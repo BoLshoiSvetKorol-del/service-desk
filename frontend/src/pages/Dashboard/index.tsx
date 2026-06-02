@@ -146,7 +146,7 @@ export default function DashboardPage() {
         <Col xs={12} sm={6}>
           <Card loading={loading}>
             <Statistic
-              title="Мои заявки"
+              title={user?.role === 'agent' ? 'Назначено мне' : user?.role === 'department_head' ? 'Заявки отдела' : 'Мои заявки'}
               value={stats.total}
               prefix={<FileTextOutlined style={{ color: '#1677ff' }} />}
             />

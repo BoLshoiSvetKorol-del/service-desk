@@ -442,7 +442,7 @@ class TestChangeStatus:
 
         r = await client.patch(
             f"/api/v1/tickets/{ticket['id']}/status",
-            json={"status": "cancelled"},
+            json={"status": "cancelled", "comment": "Создана по ошибке"},
             headers=user["headers"],
         )
         assert r.status_code == 200

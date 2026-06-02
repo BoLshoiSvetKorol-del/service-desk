@@ -31,6 +31,8 @@ def _base_filters(
     department_id: int | None,
     type_id: int | None,
     priority_id: int | None,
+    current_user: User | None = None,
+    assignee_id: int | None = None,
 ):
     """Общие WHERE-условия для всех отчётов."""
     conditions = []
@@ -39,8 +41,22 @@ def _base_filters(
     if date_to:
         end = datetime(date_to.year, date_to.month, date_to.day, 23, 59, 59, tzinfo=timezone.utc)
         conditions.append(Ticket.created_at <= end)
-    if department_id:
+
+    # role-based scope
+    if current_user is not None:
+        if current_user.role == UserRole.department_head:
+            if current_user.department_id is not None:
+                conditions.append(Ticket.department_id == current_user.department_id)
+            else:
+                conditions.append(Ticket.id == -1)  # no department → no data
+        elif current_user.role == UserRole.agent:
+            conditions.append(Ticket.assignee_id == current_user.id)
+        # admin: no scope filter
+    if department_id and (current_user is None or current_user.role == UserRole.admin):
         conditions.append(Ticket.department_id == department_id)
+
+    if assignee_id:
+        conditions.append(Ticket.assignee_id == assignee_id)
     if type_id:
         conditions.append(Ticket.type_id == type_id)
     if priority_id:
@@ -53,6 +69,7 @@ async def tickets_count(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     department_id: int | None = Query(default=None),
+    assignee_id: int | None = Query(default=None),
     type_id: int | None = Query(default=None),
     priority_id: int | None = Query(default=None),
     groupby: Literal["day", "week", "month"] = Query(default="day"),
@@ -60,7 +77,7 @@ async def tickets_count(
     current_user: User = Depends(require_role(*_ALLOWED_ROLES)),
 ):
     period_col = func.date_trunc(groupby, Ticket.created_at).label("period")
-    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id)
+    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id, current_user, assignee_id)
 
     query = (
         select(period_col, func.count(Ticket.id).label("count"))
@@ -83,12 +100,13 @@ async def by_status(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     department_id: int | None = Query(default=None),
+    assignee_id: int | None = Query(default=None),
     type_id: int | None = Query(default=None),
     priority_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(*_ALLOWED_ROLES)),
 ):
-    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id)
+    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id, current_user, assignee_id)
 
     query = (
         select(Ticket.status.label("status"), func.count(Ticket.id).label("count"))
@@ -104,12 +122,13 @@ async def avg_resolution_time(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     department_id: int | None = Query(default=None),
+    assignee_id: int | None = Query(default=None),
     type_id: int | None = Query(default=None),
     priority_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(*_ALLOWED_ROLES)),
 ):
-    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id)
+    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id, current_user, assignee_id)
     conditions.append(Ticket.closed_at.isnot(None))
 
     # avg секунд → часы
@@ -139,12 +158,13 @@ async def sla_compliance(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     department_id: int | None = Query(default=None),
+    assignee_id: int | None = Query(default=None),
     type_id: int | None = Query(default=None),
     priority_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(*_ALLOWED_ROLES)),
 ):
-    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id)
+    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id, current_user, assignee_id)
 
     query = select(
         func.count(Ticket.id).label("total"),
@@ -165,12 +185,13 @@ async def export_tickets(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     department_id: int | None = Query(default=None),
+    assignee_id: int | None = Query(default=None),
     type_id: int | None = Query(default=None),
     priority_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(*_ALLOWED_ROLES)),
 ):
-    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id)
+    conditions = _base_filters(date_from, date_to, department_id, type_id, priority_id, current_user, assignee_id)
 
     query = (
         select(

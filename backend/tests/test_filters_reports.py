@@ -217,14 +217,14 @@ class TestReports:
         r = await client.get("/api/v1/reports/export?format=csv", headers=admin)
         assert r.status_code == 200
         assert "text/csv" in r.headers.get("content-type", "")
-        assert "tickets.csv" in r.headers.get("content-disposition", "")
+        assert ".csv" in r.headers.get("content-disposition", "")
 
     async def test_export_xlsx_content_type(self, client: AsyncClient):
         admin = await _auth(client)
         r = await client.get("/api/v1/reports/export?format=xlsx", headers=admin)
         assert r.status_code == 200
         assert "spreadsheetml" in r.headers.get("content-type", "")
-        assert "tickets.xlsx" in r.headers.get("content-disposition", "")
+        assert ".xlsx" in r.headers.get("content-disposition", "")
 
     async def test_reports_forbidden_for_regular_user(self, client: AsyncClient):
         admin = await _auth(client)

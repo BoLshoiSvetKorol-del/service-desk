@@ -137,9 +137,11 @@ export default function FilterPanel({ filters, onChange }: Props) {
         />
         <RangePicker
           placeholder={['Дата от', 'Дата до']}
-          onChange={(_, strings) => {
-            const [from, to] = strings as [string, string]
-            setFilter({ date_from: from || undefined, date_to: to || undefined })
+          onChange={(dates) => {
+            setFilter({
+              date_from: dates?.[0]?.format('YYYY-MM-DD') ?? undefined,
+              date_to: dates?.[1]?.format('YYYY-MM-DD') ?? undefined,
+            })
           }}
           format="DD.MM.YYYY"
           style={{ width: 240 }}

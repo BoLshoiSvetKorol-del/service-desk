@@ -23,7 +23,7 @@ ALLOWED_TRANSITIONS: dict[tuple[TicketStatus, TicketStatus], set[UserRole]] = {
     (TicketStatus.in_progress, TicketStatus.cancelled): _STAFF,
     (TicketStatus.waiting_info, TicketStatus.in_progress): {UserRole.user, *_STAFF},
     (TicketStatus.waiting_info, TicketStatus.cancelled): _STAFF,
-    (TicketStatus.resolved, TicketStatus.in_progress): {UserRole.user, UserRole.admin},
+    (TicketStatus.resolved, TicketStatus.in_progress): {UserRole.user, UserRole.admin, UserRole.agent, UserRole.department_head},
 }
 
 TERMINAL_STATUSES = {TicketStatus.resolved, TicketStatus.cancelled}
@@ -243,14 +243,6 @@ async def change_status(
 async def assign_ticket(
     db: AsyncSession, ticket: Ticket, user: User, assignee_id: int | None, department_id: int | None
 ) -> Ticket:
-    # Only admin or department_head of the ticket's department may assign
-    if user.role not in (UserRole.admin, UserRole.department_head):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Назначать исполнителя может только руководитель отдела или администратор")
-    if user.role == UserRole.department_head and ticket.department_id != user.department_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Руководитель может назначать только в своём отделе")
-
     old_assignee = ticket.assignee_id
     old_dept = ticket.department_id
     new_assignee_name: str | None = None
@@ -262,9 +254,6 @@ async def assign_ticket(
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         if assignee.role == UserRole.user:
             raise HTTPException(status_code=400, detail="Нельзя назначить роль 'user' исполнителем")
-        # department_head can only assign people from their own department
-        if user.role == UserRole.department_head and assignee.department_id != user.department_id:
-            raise HTTPException(status_code=400, detail="Можно назначать только сотрудников своего отдела")
         ticket.assignee_id = assignee_id
         new_assignee_name = assignee.full_name or assignee.username
     else:

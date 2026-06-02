@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { Button, Table, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
@@ -10,20 +10,34 @@ import FilterPanel from '../../../components/tickets/FilterPanel'
 import PriorityBadge from '../../../components/common/PriorityBadge'
 import StatusBadge from '../../../components/common/StatusBadge'
 import SLACountdown from '../../../components/common/SLACountdown'
+import { useTicketEventStore } from '../../../store/ticketEventStore'
 
 export default function TicketsListPage() {
   const [filters, setFilters] = useState<TicketFilters>({ page: 1, page_size: 20 })
   const [data, setData] = useState<PagedResponse<TicketListItem> | null>(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const lastTicketEvent = useTicketEventStore(s => s.lastEvent)
 
-  useEffect(() => {
+  const reload = useCallback((f: TicketFilters) => {
     setLoading(true)
-    getTickets(filters)
+    getTickets(f)
       .then(setData)
       .catch(() => message.error('Ошибка загрузки заявок'))
       .finally(() => setLoading(false))
-  }, [filters])
+  }, [])
+
+  useEffect(() => {
+    reload(filters)
+  }, [filters, reload])
+
+  // Real-time: reload list when new ticket created or status/assign changed
+  useEffect(() => {
+    if (!lastTicketEvent) return
+    if (['ticket_created', 'status_changed', 'assigned'].includes(lastTicketEvent.type)) {
+      reload(filters)
+    }
+  }, [lastTicketEvent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns: ColumnsType<TicketListItem> = [
     {

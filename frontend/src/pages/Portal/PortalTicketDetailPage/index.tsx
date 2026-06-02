@@ -191,7 +191,7 @@ export default function PortalTicketDetailPage() {
 
           {/* Comments as chat */}
           <Card
-            title={`Переписка (${comments.length})`}
+            title={`Чат (${comments.length})`}
             style={{ marginBottom: 12 }}
             bodyStyle={{ padding: 0 }}
           >
