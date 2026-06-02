@@ -42,8 +42,10 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} << 'ENDSSH'
             set -e
             cd /opt/servicedesk
-            echo "Rebuilding backend and frontend..."
-            docker compose -f docker-compose.prod.yml build backend frontend
+            echo "Rebuilding backend..."
+            docker compose -f docker-compose.prod.yml build backend
+            echo "Rebuilding frontend..."
+            docker compose -f docker-compose.prod.yml build frontend
             docker compose -f docker-compose.prod.yml up -d backend frontend celery_worker celery_beat
             echo "Running database migrations..."
             docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head
