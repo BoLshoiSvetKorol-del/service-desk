@@ -47,8 +47,6 @@ jobs:
             echo "Rebuilding frontend..."
             docker compose -f docker-compose.prod.yml build frontend
             docker compose -f docker-compose.prod.yml up -d backend frontend celery_worker celery_beat
-            echo "Running database migrations..."
-            docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head
             echo "Cleaning up old images..."
             docker image prune -f
             echo ""
